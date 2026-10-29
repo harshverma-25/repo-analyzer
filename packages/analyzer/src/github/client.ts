@@ -22,6 +22,71 @@ export interface GitHubTreeResult {
   items: GitTreeItem[];
 }
 
+const ALLOWED_REDIRECT_HOSTS = new Set([
+  'api.github.com',
+  'raw.githubusercontent.com',
+  'github.com',
+  'codeload.github.com',
+]);
+
+const REQUEST_TIMEOUT_MS = 10000; // 10s strict timeout
+
+/**
+ * SSRF-Safe Fetch: Enforces HTTPS, approved destination domains, and manual redirect inspection.
+ */
+export async function safeFetch(
+  url: string,
+  options?: RequestInit,
+  redirectCount = 0
+): Promise<Response> {
+  if (redirectCount > 3) {
+    throw new Error('Too many HTTP redirects encountered.');
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+
+  // Enforce HTTPS
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`Insecure protocol "${parsed.protocol}" is rejected.`);
+  }
+
+  // Validate Hostname against allowed GitHub domains
+  const host = parsed.hostname.toLowerCase();
+  if (!ALLOWED_REDIRECT_HOSTS.has(host)) {
+    throw new Error(`Access to unapproved host "${host}" is blocked for SSRF prevention.`);
+  }
+
+  // Enforce request timeout
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : timeoutSignal;
+
+  const res = await fetch(url, {
+    ...options,
+    redirect: 'manual', // Do not automatically follow redirects to untrusted destinations
+    signal,
+  });
+
+  // Handle redirects safely
+  if ([301, 302, 307, 308].includes(res.status)) {
+    const location = res.headers.get('location');
+    if (!location) {
+      throw new Error(`Received HTTP ${res.status} redirect without a location header.`);
+    }
+
+    const nextUrl = new URL(location, url).toString();
+    return safeFetch(nextUrl, options, redirectCount + 1);
+  }
+
+  return res;
+}
+
 export class GitHubClient {
   private token?: string;
   private baseUrl = 'https://api.github.com';
@@ -42,8 +107,10 @@ export class GitHubClient {
   }
 
   async getRepoDetails(owner: string, repo: string): Promise<GitHubRepoDetails> {
-    const url = `${this.baseUrl}/repos/${owner}/${repo}`;
-    const res = await fetch(url, { headers: this.getHeaders() });
+    const cleanOwner = encodeURIComponent(owner.trim());
+    const cleanRepo = encodeURIComponent(repo.trim());
+    const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}`;
+    const res = await safeFetch(url, { headers: this.getHeaders() });
 
     if (res.status === 404) {
       throw new Error(`Repository "${owner}/${repo}" was not found or is private.`);
@@ -69,9 +136,11 @@ export class GitHubClient {
   }
 
   async resolveCommitSha(owner: string, repo: string, revision?: string): Promise<string> {
+    const cleanOwner = encodeURIComponent(owner.trim());
+    const cleanRepo = encodeURIComponent(repo.trim());
     const ref = revision && revision.trim().length > 0 ? revision.trim() : 'HEAD';
-    const url = `${this.baseUrl}/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`;
-    const res = await fetch(url, { headers: this.getHeaders() });
+    const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/commits/${encodeURIComponent(ref)}`;
+    const res = await safeFetch(url, { headers: this.getHeaders() });
 
     if (!res.ok) {
       throw new Error(`Failed to resolve commit for revision "${ref}": ${res.statusText}`);
@@ -86,8 +155,11 @@ export class GitHubClient {
   }
 
   async getGitTree(owner: string, repo: string, commitSha: string): Promise<GitHubTreeResult> {
-    const url = `${this.baseUrl}/repos/${owner}/${repo}/git/trees/${commitSha}?recursive=1`;
-    const res = await fetch(url, { headers: this.getHeaders() });
+    const cleanOwner = encodeURIComponent(owner.trim());
+    const cleanRepo = encodeURIComponent(repo.trim());
+    const cleanSha = encodeURIComponent(commitSha.trim());
+    const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/git/trees/${cleanSha}?recursive=1`;
+    const res = await safeFetch(url, { headers: this.getHeaders() });
 
     if (!res.ok) {
       throw new Error(`Failed to fetch Git tree for commit ${commitSha}: ${res.statusText}`);
@@ -104,8 +176,23 @@ export class GitHubClient {
   }
 
   async fetchRawFile(owner: string, repo: string, commitSha: string, filePath: string): Promise<string> {
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${commitSha}/${filePath}`;
-    const res = await fetch(url);
+    const cleanOwner = encodeURIComponent(owner.trim());
+    const cleanRepo = encodeURIComponent(repo.trim());
+    const cleanSha = encodeURIComponent(commitSha.trim());
+
+    // Sanitize path against directory traversal
+    const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (normalized.includes('..')) {
+      throw new Error('Path traversal sequence detected in file path');
+    }
+
+    const encodedPath = normalized
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    const url = `https://raw.githubusercontent.com/${cleanOwner}/${cleanRepo}/${cleanSha}/${encodedPath}`;
+    const res = await safeFetch(url);
 
     if (!res.ok) {
       throw new Error(`Failed to fetch file content for "${filePath}": ${res.statusText}`);

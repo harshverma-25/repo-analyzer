@@ -66,6 +66,16 @@ export function countLinesOfCode(content: string, filePath: string): LineCountRe
   const ext = path.extname(filePath).toLowerCase();
   const rule = EXTENSION_RULES[ext] || { name: detectLanguageFromPath(filePath), lineComments: ['//', '#'] };
 
+  if (!content || content.length === 0) {
+    return {
+      codeLines: 0,
+      blankLines: 0,
+      commentLines: 0,
+      totalLines: 0,
+      language: rule.name,
+    };
+  }
+
   const lines = content.split(/\r?\n/);
   let codeLines = 0;
   let blankLines = 0;

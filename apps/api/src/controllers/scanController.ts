@@ -32,6 +32,26 @@ export async function createScan(req: Request, res: Response<ApiResponse>, next:
       });
     }
 
+    // Check if there is already an active scan (queued or running)
+    const existingActiveScan = await Scan.findOne({
+      projectId: project._id,
+      status: { $in: ['queued', 'running'] },
+    });
+
+    if (existingActiveScan) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          scanId: existingActiveScan._id.toString(),
+          status: existingActiveScan.status,
+          stage: existingActiveScan.stage,
+          progressPercentage: existingActiveScan.progressPercentage,
+          message: 'An analysis scan is already in progress for this repository.',
+        },
+        error: null,
+      });
+    }
+
     // Create Scan document
     const scan = await Scan.create({
       projectId: project._id,

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from 'express';
+import rateLimit from 'express-rate-limit';
 import { isDatabaseConnected } from '@repo-analyzer/database';
 import { getAIProvider } from '@repo-analyzer/ai';
 import {
@@ -16,6 +17,39 @@ import {
 } from '../controllers/projectController.js';
 
 export const apiRouter: IRouter = Router();
+
+// ==========================================
+// Rate Limiters for Security & Abuse Prevention
+// ==========================================
+const scanCreateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Limit each IP to 15 scan requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    data: null,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many repository scan requests created from this IP. Please try again after 15 minutes.',
+    },
+  },
+});
+
+const aiExplainLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each IP to 30 AI queries per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    data: null,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many AI explanation queries submitted. Please try again in a few minutes.',
+    },
+  },
+});
 
 // ==========================================
 // Health & Diagnostics
@@ -38,7 +72,7 @@ apiRouter.get('/health', (req, res) => {
 // ==========================================
 // Scan Pipeline
 // ==========================================
-apiRouter.post('/scans', createScan);
+apiRouter.post('/scans', scanCreateLimiter, createScan);
 apiRouter.get('/scans/:scanId', getScanStatus);
 apiRouter.get('/scans/:scanId/report', getScanReport);
 
@@ -52,7 +86,7 @@ apiRouter.get('/scans/:scanId/models', getScanArtifactByType('database_models'))
 apiRouter.get('/scans/:scanId/security', getScanArtifactByType('security_findings'));
 
 // Grounded AI Exploration
-apiRouter.post('/scans/:scanId/ai/explain', explainScanAI);
+apiRouter.post('/scans/:scanId/ai/explain', aiExplainLimiter, explainScanAI);
 
 // ==========================================
 // Projects & Scan History

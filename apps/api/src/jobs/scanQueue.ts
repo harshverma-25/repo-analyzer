@@ -4,6 +4,7 @@ import {
   parseAndValidateGitHubUrl,
   GitHubClient,
   runDeterministicAnalysis,
+  filterRepoFile,
   type RawRepoFile,
 } from '@repo-analyzer/analyzer';
 import { getAIProvider } from '@repo-analyzer/ai';
@@ -17,9 +18,29 @@ interface ScanJob {
 
 class ScanQueue {
   private queue: ScanJob[] = [];
-  private isProcessing = false;
   private maxConcurrency = 2;
   private activeJobs = 0;
+
+  /**
+   * Reconciles any scans left hanging in 'running' or 'queued' from a prior server process.
+   */
+  async reconcileInterruptedScans() {
+    try {
+      const result = await Scan.updateMany(
+        { status: { $in: ['queued', 'running'] } },
+        {
+          status: 'failed',
+          stage: 'failed',
+          errorMessage: 'Scan interrupted by an unexpected server reboot or termination.',
+        }
+      );
+      if (result.modifiedCount > 0) {
+        console.log(`[ScanQueue] Reconciled ${result.modifiedCount} interrupted scan(s) from previous process.`);
+      }
+    } catch (err) {
+      console.warn('[ScanQueue] Failed to reconcile interrupted scans:', err);
+    }
+  }
 
   enqueue(job: ScanJob) {
     this.queue.push(job);
@@ -71,12 +92,16 @@ class ScanQueue {
       await this.updateProgress(scanId, 'fetching_tree', 35);
       const treeResult = await client.getGitTree(parsedUrl.owner, parsedUrl.repo, commitSha);
 
-      // 4. Fetching files for analysis (prioritizing code & manifest files)
+      // 4. Fetching files for analysis (strictly pre-filtered to exclude vendor code & secrets)
       await this.updateProgress(scanId, 'analyzing_code', 50);
 
-      // Select relevant code files up to limit
+      // Select relevant code files, pre-filtering against exclusions & secrets
       const candidateFiles = treeResult.items.filter((item) => {
         if (item.type !== 'blob') return false;
+        // Verify filter rules (rejecting .git, node_modules, .env, lockfiles, etc.)
+        const filter = filterRepoFile(item.path, item.size);
+        if (!filter.accepted) return false;
+
         const p = item.path.toLowerCase();
         return (
           p.endsWith('.js') ||
@@ -91,7 +116,7 @@ class ScanQueue {
         );
       });
 
-      // Limit fetched files to bounded batch (e.g. 150 top files) to avoid exceeding rate limits
+      // Limit fetched files to bounded batch (150 top files) to avoid exceeding rate limits
       const fetchBatch = candidateFiles.slice(0, 150);
       const rawFiles: RawRepoFile[] = [];
 
@@ -112,6 +137,11 @@ class ScanQueue {
       // 5. Run Deterministic Static Analysis
       await this.updateProgress(scanId, 'analyzing_code', 70);
       const analysisOutput = runDeterministicAnalysis(rawFiles);
+
+      // If tree was truncated by GitHub, record warning diagnostic
+      if (treeResult.truncated) {
+        analysisOutput.statistics.skippedReasons['GitHub API truncated tree (exceeded 100,000 repository entries)'] = 1;
+      }
 
       // 6. Generate AI Insights (Gemini or Fallback)
       await this.updateProgress(scanId, 'generating_ai_insights', 85);

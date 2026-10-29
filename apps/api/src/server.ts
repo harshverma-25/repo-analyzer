@@ -4,6 +4,7 @@ import { config } from './config/index.js';
 import { connectDatabase, disconnectDatabase } from '@repo-analyzer/database';
 import { apiRouter } from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { scanQueue } from './jobs/scanQueue.js';
 
 export const app: Express = express();
 
@@ -40,6 +41,9 @@ export async function startServer() {
   try {
     console.log(`[Server] Connecting to MongoDB at ${config.mongodbUri}...`);
     await connectDatabase(config.mongodbUri);
+
+    // Reconcile any scans that were interrupted by a prior server reboot
+    await scanQueue.reconcileInterruptedScans();
 
     server = app.listen(config.port, () => {
       console.log(`[Server] Repo Analyzer API listening on port ${config.port} (${config.nodeEnv})`);

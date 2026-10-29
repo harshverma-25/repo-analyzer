@@ -47,6 +47,30 @@ const AUTH_MIDDLEWARE_NAMES = new Set([
   'passport.authenticate',
 ]);
 
+const NON_EXPRESS_CALLERS = new Set([
+  'map',
+  'mymap',
+  'cache',
+  'config',
+  'params',
+  'searchparams',
+  'headers',
+  'state',
+  'store',
+  'ref',
+  'props',
+  '_',
+  'lodash',
+  'document',
+  'window',
+  'sessionstorage',
+  'localstorage',
+  'event',
+  'events',
+  'url',
+  'querystring',
+]);
+
 export function extractExpressRoutes(
   sourceFiles: { path: string; content: string }[]
 ): RouteFinding[] {
@@ -104,7 +128,9 @@ export function extractExpressRoutes(
           }
 
           // Check for HTTP Methods: app.get('/users', ...), router.post('/login', ...)
-          if (HTTP_METHODS[methodName] && node.arguments.length >= 1) {
+          // Express routes require at least a path and at least one handler callback (arguments.length >= 2)
+          const isNonExpressCaller = NON_EXPRESS_CALLERS.has(callerText.toLowerCase());
+          if (HTTP_METHODS[methodName] && node.arguments.length >= 2 && !isNonExpressCaller) {
             const firstArg = node.arguments[0];
             let rawPath = '';
             let isDynamic = false;
