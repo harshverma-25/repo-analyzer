@@ -116,6 +116,17 @@ class ScanQueue {
         );
       });
 
+      // Always prioritize manifests and configuration files first
+      candidateFiles.sort((a, b) => {
+        const aLower = a.path.toLowerCase();
+        const bLower = b.path.toLowerCase();
+        const aIsManifest = aLower === 'package.json' || aLower === 'tsconfig.json';
+        const bIsManifest = bLower === 'package.json' || bLower === 'tsconfig.json';
+        if (aIsManifest && !bIsManifest) return -1;
+        if (!aIsManifest && bIsManifest) return 1;
+        return 0;
+      });
+
       // Limit fetched files to bounded batch (150 top files) to avoid exceeding rate limits
       const fetchBatch = candidateFiles.slice(0, 150);
       const rawFiles: RawRepoFile[] = [];

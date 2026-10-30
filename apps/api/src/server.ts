@@ -9,8 +9,15 @@ import { scanQueue } from './jobs/scanQueue.js';
 export const app: Express = express();
 
 // Middlewares
+const allowedOrigins = config.corsOrigin === '*'
+  ? true
+  : Array.from(new Set([
+      ...config.corsOrigin.split(',').map((s) => s.trim()).filter(Boolean),
+      'http://localhost:3000',
+    ]));
+
 app.use(cors({
-  origin: config.corsOrigin === '*' ? true : [config.corsOrigin, 'http://localhost:3000'],
+  origin: allowedOrigins,
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

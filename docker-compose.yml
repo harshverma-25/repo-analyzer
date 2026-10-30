@@ -1,17 +1,38 @@
-version: '3.8'
-
 services:
-  mongo:
+  mongodb:
     image: mongo:7.0
-    container_name: repo-analyzer-mongo
+    container_name: repo-analyzer-db
     restart: unless-stopped
     ports:
       - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: repo-analyzer
     volumes:
-      - mongo_data:/data/db
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: repo-analyzer-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - CORS_ORIGIN=http://localhost:3000
+      - MONGODB_URI=mongodb://mongodb:27017/repo-analyzer
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+    depends_on:
+      mongodb:
+        condition: service_healthy
 
 volumes:
-  mongo_data:
+  mongo-data:
     driver: local

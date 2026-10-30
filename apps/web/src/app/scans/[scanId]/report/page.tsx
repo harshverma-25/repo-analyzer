@@ -414,6 +414,58 @@ export default function ScanReportPage() {
               </table>
             </div>
           </div>
+
+          {/* Analysis Coverage & Diagnostics */}
+          <div className="p-6 rounded-xl bg-surface border border-border shadow-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-text-main flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Analysis Coverage & Static Scope</span>
+              </h3>
+              <span className="text-[11px] font-mono text-text-subtle">
+                Bounded ingestion (max 150 candidate source files)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 rounded-lg bg-background border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-text-subtle mb-1">Total Files In Tree</div>
+                <div className="text-base font-bold font-mono text-text-main">{statistics.totalFiles}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-background border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-text-subtle mb-1">AST Analyzed</div>
+                <div className="text-base font-bold font-mono text-emerald-400">{statistics.analyzedFiles}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-background border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-text-subtle mb-1">Excluded / Skipped</div>
+                <div className="text-base font-bold font-mono text-amber-400">{statistics.skippedFiles}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-background border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-text-subtle mb-1">Code Density</div>
+                <div className="text-base font-bold font-mono text-primary">
+                  {statistics.totalLines > 0 ? Math.round((statistics.codeLines / statistics.totalLines) * 100) : 0}%
+                </div>
+              </div>
+            </div>
+
+            {statistics.skippedReasons && Object.keys(statistics.skippedReasons).length > 0 && (
+              <div className="pt-2 border-t border-border/60 space-y-2">
+                <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider font-mono">
+                  Skipped File Categories:
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  {Object.entries(statistics.skippedReasons).map(([reason, count], idx) => (
+                    <div key={idx} className="p-2 rounded bg-background/60 border border-border/40 flex items-center justify-between">
+                      <span className="text-text-muted truncate pr-2">{reason}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-surface border border-border text-text-main font-semibold">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -455,8 +507,23 @@ export default function ScanReportPage() {
 
           {/* Endpoint List */}
           {filteredEndpoints.length === 0 ? (
-            <div className="p-12 text-center rounded-xl bg-surface border border-border text-text-subtle text-xs">
-              No matching Express.js routes discovered for your query.
+            <div className="p-8 text-center rounded-xl bg-surface border border-border text-xs space-y-2">
+              {endpoints.length === 0 ? (
+                <>
+                  <p className="font-semibold text-text-main">No Express.js REST endpoints detected in analyzed files.</p>
+                  <p className="text-text-subtle max-w-lg mx-auto">
+                    This repository may be a middleware library, utility package, CLI tool, or use an alternative backend
+                    framework (such as Fastify, NestJS, or Koa) or dynamic route registration not matching static Express AST patterns.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-text-main">No endpoints match your active filter.</p>
+                  <p className="text-text-subtle">
+                    Try adjusting the search query or switching the HTTP method filter to ALL.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -715,8 +782,12 @@ export default function ScanReportPage() {
       {activeTab === 'models' && (
         <div className="space-y-4">
           {databaseModels.length === 0 ? (
-            <div className="p-12 text-center rounded-xl bg-surface border border-border text-text-subtle text-xs">
-              No Mongoose or ORM schema models statically discovered in this repository.
+            <div className="p-8 text-center rounded-xl bg-surface border border-border text-xs space-y-2">
+              <p className="font-semibold text-text-main">No Mongoose schema models statically detected in analyzed files.</p>
+              <p className="text-text-subtle max-w-lg mx-auto">
+                This project may use an alternative ORM or database layer (such as Prisma, TypeORM, Drizzle, Sequelize, or raw SQL queries),
+                or connect to external database services not modeled through Mongoose schemas.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -836,8 +907,23 @@ export default function ScanReportPage() {
           </div>
 
           {filteredSecurity.length === 0 ? (
-            <div className="p-12 text-center rounded-xl bg-surface border border-border text-text-subtle text-xs">
-              No matching static security observations found for this filter.
+            <div className="p-8 text-center rounded-xl bg-surface border border-border text-xs space-y-2">
+              {securityFindings.length === 0 ? (
+                <>
+                  <p className="font-semibold text-text-main">No static security observations flagged in analyzed files.</p>
+                  <p className="text-text-subtle max-w-lg mx-auto">
+                    All scanned source files passed deterministic static checks without triggering heuristics for hardcoded credentials,
+                    arbitrary code/shell execution (eval, child_process.exec), or mutating endpoints lacking authentication guards.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-text-main">No security observations match the active severity filter ({selectedSeverity}).</p>
+                  <p className="text-text-subtle">
+                    Switch the filter to ALL to view findings of other severities.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

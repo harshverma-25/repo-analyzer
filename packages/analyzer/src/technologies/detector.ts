@@ -9,6 +9,7 @@ interface TechRule {
 
 const TECH_CATALOG: TechRule[] = [
   // Frameworks & Runtimes
+  { name: 'Node.js', category: 'runtime', configFiles: ['package.json'] },
   { name: 'Express.js', category: 'framework', packageMatches: ['express'] },
   { name: 'Next.js', category: 'framework', packageMatches: ['next'], configFiles: ['next.config.js', 'next.config.mjs', 'next.config.ts'] },
   { name: 'React', category: 'framework', packageMatches: ['react'] },
@@ -55,10 +56,14 @@ export function detectTechnologies(
   const packageJsonFile = files.find((f) => f.path.toLowerCase() === 'package.json');
   let dependencies: Record<string, string> = {};
   let devDependencies: Record<string, string> = {};
+  let packageName = '';
+  let packageVersion = '';
 
   if (packageJsonFile && packageJsonFile.content) {
     try {
       const parsed = JSON.parse(packageJsonFile.content);
+      packageName = (parsed.name || '').toLowerCase();
+      packageVersion = parsed.version || '';
       dependencies = parsed.dependencies || {};
       devDependencies = parsed.devDependencies || {};
     } catch {
@@ -74,7 +79,17 @@ export function detectTechnologies(
     // Check package manifests
     if (rule.packageMatches) {
       for (const pkg of rule.packageMatches) {
-        if (dependencies[pkg]) {
+        if (packageName === pkg.toLowerCase()) {
+          findings.push({
+            name: rule.name,
+            category: rule.category,
+            version: packageVersion,
+            confidence: 'confirmed',
+            evidence: `Repository is the core package "${packageName}" defined in package.json`,
+          });
+          foundNames.add(rule.name);
+          break;
+        } else if (dependencies[pkg]) {
           findings.push({
             name: rule.name,
             category: rule.category,
