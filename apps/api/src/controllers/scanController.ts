@@ -55,7 +55,9 @@ export async function createScan(req: Request, res: Response<ApiResponse>, next:
     const existingActiveScan = await Scan.findOne({
       projectId: project._id,
       status: { $in: ['queued', 'running'] },
-    });
+    })
+      .select('_id status stage progressPercentage')
+      .lean();
 
     if (existingActiveScan) {
       return res.status(200).json({
@@ -117,7 +119,9 @@ export async function getScanStatus(req: Request, res: Response<ApiResponse>, ne
       });
     }
 
-    const scan = await Scan.findById(scanId);
+    const scan = await Scan.findById(scanId)
+      .select('_id status stage progressPercentage commitSha errorMessage startedAt completedAt summaryMetrics')
+      .lean();
     if (!scan) {
       return res.status(404).json({
         success: false,
@@ -157,7 +161,7 @@ export async function getScanReport(req: Request, res: Response<ApiResponse>, ne
       });
     }
 
-    const scan = await Scan.findById(scanId);
+    const scan = await Scan.findById(scanId).lean();
     if (!scan) {
       return res.status(404).json({
         success: false,
@@ -166,8 +170,8 @@ export async function getScanReport(req: Request, res: Response<ApiResponse>, ne
       });
     }
 
-    const project = await Project.findById(scan.projectId);
-    const artifacts = await ScanArtifact.find({ scanId: scan._id });
+    const project = await Project.findById(scan.projectId).lean();
+    const artifacts = await ScanArtifact.find({ scanId: scan._id }).select('artifactType data').lean();
 
     const artifactMap: Record<string, any> = {};
     for (const art of artifacts) {
@@ -184,12 +188,12 @@ export async function getScanReport(req: Request, res: Response<ApiResponse>, ne
         stage: scan.stage,
         progressPercentage: scan.progressPercentage,
         analyzerVersion: scan.analyzerVersion,
-        startedAt: scan.startedAt?.toISOString(),
-        completedAt: scan.completedAt?.toISOString(),
+        startedAt: scan.startedAt ? new Date(scan.startedAt).toISOString() : undefined,
+        completedAt: scan.completedAt ? new Date(scan.completedAt).toISOString() : undefined,
         errorMessage: scan.errorMessage,
         summaryMetrics: scan.summaryMetrics,
-        createdAt: scan.createdAt.toISOString(),
-        updatedAt: scan.updatedAt.toISOString(),
+        createdAt: scan.createdAt ? new Date(scan.createdAt).toISOString() : new Date().toISOString(),
+        updatedAt: scan.updatedAt ? new Date(scan.updatedAt).toISOString() : new Date().toISOString(),
       },
       project: {
         id: project ? project._id.toString() : '',
@@ -198,8 +202,8 @@ export async function getScanReport(req: Request, res: Response<ApiResponse>, ne
         canonicalUrl: project?.canonicalUrl || '',
         displayName: project?.displayName || '',
         defaultBranch: project?.defaultBranch,
-        createdAt: project ? project.createdAt.toISOString() : '',
-        updatedAt: project ? project.updatedAt.toISOString() : '',
+        createdAt: project?.createdAt ? new Date(project.createdAt).toISOString() : '',
+        updatedAt: project?.updatedAt ? new Date(project.updatedAt).toISOString() : '',
       },
       statistics: artifactMap['statistics'] || {
         totalFiles: 0,
@@ -254,7 +258,9 @@ export function getScanArtifactByType(artifactType: string) {
       const artifact = await ScanArtifact.findOne({
         scanId: new mongoose.Types.ObjectId(scanId),
         artifactType,
-      });
+      })
+        .select('data')
+        .lean();
 
       if (!artifact) {
         return res.status(404).json({
@@ -288,7 +294,7 @@ export async function explainScanAI(req: Request, res: Response<ApiResponse>, ne
       });
     }
 
-    const scan = await Scan.findById(scanId);
+    const scan = await Scan.findById(scanId).select('_id projectId commitSha').lean();
     if (!scan) {
       return res.status(404).json({
         success: false,
@@ -297,8 +303,8 @@ export async function explainScanAI(req: Request, res: Response<ApiResponse>, ne
       });
     }
 
-    const project = await Project.findById(scan.projectId);
-    const artifacts = await ScanArtifact.find({ scanId: scan._id });
+    const project = await Project.findById(scan.projectId).select('displayName').lean();
+    const artifacts = await ScanArtifact.find({ scanId: scan._id }).select('artifactType data').lean();
     const artifactMap: Record<string, any> = {};
     for (const art of artifacts) {
       artifactMap[art.artifactType] = art.data;

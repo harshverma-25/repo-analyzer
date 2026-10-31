@@ -72,7 +72,7 @@ const NON_EXPRESS_CALLERS = new Set([
 ]);
 
 export function extractExpressRoutes(
-  sourceFiles: { path: string; content: string }[]
+  sourceFiles: { path: string; content: string; ast?: ts.SourceFile }[]
 ): RouteFinding[] {
   const rawRoutes: RawRouteCall[] = [];
   const mounts: RouterMount[] = [];
@@ -82,12 +82,14 @@ export function extractExpressRoutes(
     // Only analyze JS/TS files
     if (!/\.[jt]sx?$/.test(file.path)) continue;
 
-    const sourceFile = ts.createSourceFile(
-      file.path,
-      file.content,
-      ts.ScriptTarget.Latest,
-      true
-    );
+    const sourceFile =
+      file.ast ||
+      ts.createSourceFile(
+        file.path,
+        file.content,
+        ts.ScriptTarget.Latest,
+        true
+      );
 
     function visit(node: ts.Node) {
       // 1. Detect Router Export (e.g. export default router; or module.exports = router;)

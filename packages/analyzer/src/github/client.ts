@@ -125,11 +125,11 @@ export class GitHubClient {
     return headers;
   }
 
-  async getRepoDetails(owner: string, repo: string): Promise<GitHubRepoDetails> {
+  async getRepoDetails(owner: string, repo: string, options?: { signal?: AbortSignal }): Promise<GitHubRepoDetails> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
     const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}`;
-    const res = await safeFetch(url, { headers: this.getHeaders() });
+    const res = await safeFetch(url, { headers: this.getHeaders(), signal: options?.signal });
 
     if (res.status === 404) {
       throw new Error(`Repository "${owner}/${repo}" was not found or is private.`);
@@ -154,12 +154,12 @@ export class GitHubClient {
     };
   }
 
-  async resolveCommitSha(owner: string, repo: string, revision?: string): Promise<string> {
+  async resolveCommitSha(owner: string, repo: string, revision?: string, options?: { signal?: AbortSignal }): Promise<string> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
     const ref = revision && revision.trim().length > 0 ? revision.trim() : 'HEAD';
     const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/commits/${encodeURIComponent(ref)}`;
-    const res = await safeFetch(url, { headers: this.getHeaders() });
+    const res = await safeFetch(url, { headers: this.getHeaders(), signal: options?.signal });
 
     if (!res.ok) {
       throw new Error(`Failed to resolve commit for revision "${ref}": ${res.statusText}`);
@@ -173,12 +173,12 @@ export class GitHubClient {
     return data.sha;
   }
 
-  async getGitTree(owner: string, repo: string, commitSha: string): Promise<GitHubTreeResult> {
+  async getGitTree(owner: string, repo: string, commitSha: string, options?: { signal?: AbortSignal }): Promise<GitHubTreeResult> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
     const cleanSha = encodeURIComponent(commitSha.trim());
     const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/git/trees/${cleanSha}?recursive=1`;
-    const res = await safeFetch(url, { headers: this.getHeaders() });
+    const res = await safeFetch(url, { headers: this.getHeaders(), signal: options?.signal });
 
     if (!res.ok) {
       throw new Error(`Failed to fetch Git tree for commit ${commitSha}: ${res.statusText}`);
@@ -194,7 +194,7 @@ export class GitHubClient {
     };
   }
 
-  async fetchRawFile(owner: string, repo: string, commitSha: string, filePath: string): Promise<string> {
+  async fetchRawFile(owner: string, repo: string, commitSha: string, filePath: string, options?: { signal?: AbortSignal }): Promise<string> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
     const cleanSha = encodeURIComponent(commitSha.trim());
@@ -226,7 +226,7 @@ export class GitHubClient {
       .join('/');
 
     const url = `https://raw.githubusercontent.com/${cleanOwner}/${cleanRepo}/${cleanSha}/${encodedPath}`;
-    const res = await safeFetch(url);
+    const res = await safeFetch(url, { signal: options?.signal });
 
     if (!res.ok) {
       throw new Error(`Failed to fetch file content for "${filePath}": ${res.statusText}`);

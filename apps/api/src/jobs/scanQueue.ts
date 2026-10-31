@@ -8,6 +8,7 @@ import {
   type RawRepoFile,
 } from '@repo-analyzer/analyzer';
 import { getAIProvider } from '@repo-analyzer/ai';
+import { config } from '../config/index.js';
 
 interface ScanJob {
   scanId: string;
@@ -18,7 +19,7 @@ interface ScanJob {
 
 class ScanQueue {
   private queue: ScanJob[] = [];
-  private maxConcurrency = 2;
+  private maxConcurrency = config.maxConcurrentScans || 2;
   private activeJobs = 0;
 
   /**
@@ -70,22 +71,25 @@ class ScanQueue {
     const { scanId, projectId, repoUrl, branch } = job;
     console.log(`[ScanQueue] Starting execution of scan ${scanId} for ${repoUrl}`);
 
-    const client = new GitHubClient();
+    const client = new GitHubClient(config.githubToken);
     const aiProvider = getAIProvider();
 
-    // 5-minute global timeout guard per scan job
-    let timeoutHandle: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(new Error('Scan execution timed out after 5 minutes'));
-      }, 5 * 60 * 1000);
-    });
+    // AbortController for true cancellation and timeout propagation
+    const abortController = new AbortController();
+    const timeoutHandle = setTimeout(() => {
+      abortController.abort(new Error('Scan execution timed out after 5 minutes'));
+    }, 5 * 60 * 1000);
 
     try {
-      await Promise.race([
-        this.performScanPipeline(scanId, projectId, repoUrl, branch, client, aiProvider),
-        timeoutPromise,
-      ]);
+      await this.performScanPipeline(
+        scanId,
+        projectId,
+        repoUrl,
+        branch,
+        client,
+        aiProvider,
+        abortController.signal
+      );
     } catch (error: any) {
       console.error(`[ScanQueue] Scan ${scanId} failed:`, error);
       await Scan.findByIdAndUpdate(scanId, {
@@ -94,9 +98,7 @@ class ScanQueue {
         errorMessage: error.message || 'An error occurred during repository analysis.',
       });
     } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
+      clearTimeout(timeoutHandle);
     }
   }
 
@@ -106,131 +108,158 @@ class ScanQueue {
     repoUrl: string,
     branch: string | undefined,
     client: GitHubClient,
-    aiProvider: any
+    aiProvider: any,
+    signal: AbortSignal
   ) {
+    if (signal.aborted) throw new Error('Scan aborted before starting.');
 
     // 1. Stage: validating
     await this.updateProgress(scanId, 'validating', 10);
-      const parsedUrl = parseAndValidateGitHubUrl(repoUrl);
+    const parsedUrl = parseAndValidateGitHubUrl(repoUrl);
 
-      // 2. Stage: resolving_revision
-      await this.updateProgress(scanId, 'resolving_revision', 20);
-      const commitSha = await client.resolveCommitSha(parsedUrl.owner, parsedUrl.repo, branch);
+    // 2. Stage: resolving_revision
+    await this.updateProgress(scanId, 'resolving_revision', 20);
+    const commitSha = await client.resolveCommitSha(parsedUrl.owner, parsedUrl.repo, branch, { signal });
 
-      await Scan.findByIdAndUpdate(scanId, {
-        commitSha,
-        status: 'running',
-        startedAt: new Date(),
-      });
+    await Scan.findByIdAndUpdate(scanId, {
+      commitSha,
+      status: 'running',
+      startedAt: new Date(),
+    });
 
-      // 3. Stage: fetching_tree
-      await this.updateProgress(scanId, 'fetching_tree', 35);
-      const treeResult = await client.getGitTree(parsedUrl.owner, parsedUrl.repo, commitSha);
+    // 3. Stage: fetching_tree
+    await this.updateProgress(scanId, 'fetching_tree', 35);
+    const treeResult = await client.getGitTree(parsedUrl.owner, parsedUrl.repo, commitSha, { signal });
 
-      // 4. Fetching files for analysis (strictly pre-filtered to exclude vendor code & secrets)
-      await this.updateProgress(scanId, 'analyzing_code', 50);
+    // 4. Fetching files for analysis (strictly pre-filtered to exclude vendor code & secrets)
+    await this.updateProgress(scanId, 'analyzing_code', 50);
 
-      // Select relevant code files, pre-filtering against exclusions & secrets
-      const candidateFiles = treeResult.items.filter((item) => {
-        if (item.type !== 'blob') return false;
-        // Verify filter rules (rejecting .git, node_modules, .env, lockfiles, etc.)
-        const filter = filterRepoFile(item.path, item.size);
-        if (!filter.accepted) return false;
+    // Select relevant code files, pre-filtering against exclusions & secrets
+    const candidateFiles = treeResult.items.filter((item) => {
+      if (item.type !== 'blob') return false;
+      const filter = filterRepoFile(item.path, item.size);
+      if (!filter.accepted) return false;
 
-        const p = item.path.toLowerCase();
-        return (
-          p.endsWith('.js') ||
-          p.endsWith('.ts') ||
-          p.endsWith('.jsx') ||
-          p.endsWith('.tsx') ||
-          p.endsWith('.json') ||
-          p.endsWith('.yaml') ||
-          p.endsWith('.yml') ||
-          p.endsWith('.md') ||
-          p === 'dockerfile'
-        );
-      });
+      const p = item.path.toLowerCase();
+      return (
+        p.endsWith('.js') ||
+        p.endsWith('.ts') ||
+        p.endsWith('.jsx') ||
+        p.endsWith('.tsx') ||
+        p.endsWith('.json') ||
+        p.endsWith('.yaml') ||
+        p.endsWith('.yml') ||
+        p.endsWith('.md') ||
+        p === 'dockerfile'
+      );
+    });
 
-      // Always prioritize manifests and configuration files first
-      candidateFiles.sort((a, b) => {
-        const aLower = a.path.toLowerCase();
-        const bLower = b.path.toLowerCase();
-        const aIsManifest = aLower === 'package.json' || aLower === 'tsconfig.json';
-        const bIsManifest = bLower === 'package.json' || bLower === 'tsconfig.json';
-        if (aIsManifest && !bIsManifest) return -1;
-        if (!aIsManifest && bIsManifest) return 1;
-        return 0;
-      });
+    // Always prioritize manifests and configuration files first
+    candidateFiles.sort((a, b) => {
+      const aLower = a.path.toLowerCase();
+      const bLower = b.path.toLowerCase();
+      const aIsManifest = aLower === 'package.json' || aLower === 'tsconfig.json';
+      const bIsManifest = bLower === 'package.json' || bLower === 'tsconfig.json';
+      if (aIsManifest && !bIsManifest) return -1;
+      if (!aIsManifest && bIsManifest) return 1;
+      return 0;
+    });
 
-      // Limit fetched files to bounded batch (150 top files) to avoid exceeding rate limits
-      const fetchBatch = candidateFiles.slice(0, 150);
-      const rawFiles: RawRepoFile[] = [];
+    // Limit fetched files to bounded batch (150 top files) to avoid exceeding rate limits
+    const fetchBatch = candidateFiles.slice(0, 150);
+    const rawFiles: RawRepoFile[] = [];
 
-      for (let i = 0; i < fetchBatch.length; i++) {
-        const item = fetchBatch[i];
+    // Bounded concurrent worker pool for high-throughput file downloading
+    const concurrency = Math.max(1, Math.min(config.fileIngestionConcurrency || 8, 20));
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (nextIndex < fetchBatch.length) {
+        if (signal.aborted) break;
+        const currentIndex = nextIndex++;
+        const item = fetchBatch[currentIndex];
         try {
-          const content = await client.fetchRawFile(parsedUrl.owner, parsedUrl.repo, commitSha, item.path);
+          const content = await client.fetchRawFile(
+            parsedUrl.owner,
+            parsedUrl.repo,
+            commitSha,
+            item.path,
+            { signal }
+          );
           rawFiles.push({
             path: item.path,
             content,
             sizeBytes: item.size || Buffer.byteLength(content),
           });
         } catch {
-          // Individual file fetch errors (e.g. deleted or binary) are skipped safely
+          // Individual file fetch errors (e.g. binary or skipped) are handled safely
         }
       }
+    };
 
-      // 5. Run Deterministic Static Analysis
-      await this.updateProgress(scanId, 'analyzing_code', 70);
-      const analysisOutput = runDeterministicAnalysis(rawFiles);
+    const workers = Array.from(
+      { length: Math.min(concurrency, fetchBatch.length) },
+      () => worker()
+    );
+    await Promise.all(workers);
 
-      // If tree was truncated by GitHub, record warning diagnostic
-      if (treeResult.truncated) {
-        analysisOutput.statistics.skippedReasons['GitHub API truncated tree (exceeded 100,000 repository entries)'] = 1;
-      }
+    if (signal.aborted) {
+      throw new Error('Scan was cancelled or timed out.');
+    }
 
-      // 6. Generate AI Insights (Gemini or Fallback)
-      await this.updateProgress(scanId, 'generating_ai_insights', 85);
-      const aiSummary = await aiProvider.generateSummary({
-        repoName: parsedUrl.displayName,
-        commitSha,
-        statistics: analysisOutput.statistics,
-        technologies: analysisOutput.technologies,
-        endpoints: analysisOutput.endpoints,
-        databaseModels: analysisOutput.databaseModels,
-        securityFindings: analysisOutput.securityFindings,
-      });
+    // 5. Run Deterministic Static Analysis (Single-pass AST reuse)
+    await this.updateProgress(scanId, 'analyzing_code', 70);
+    const analysisOutput = runDeterministicAnalysis(rawFiles);
 
-      // 7. Persist Artifacts in Database
-      const sId = new mongoose.Types.ObjectId(scanId);
-      const artifactsToSave = [
-        { scanId: sId, artifactType: 'statistics', data: analysisOutput.statistics },
-        { scanId: sId, artifactType: 'technologies', data: analysisOutput.technologies },
-        { scanId: sId, artifactType: 'endpoints', data: analysisOutput.endpoints },
-        { scanId: sId, artifactType: 'database_models', data: analysisOutput.databaseModels },
-        { scanId: sId, artifactType: 'architecture_graph', data: analysisOutput.architectureGraph },
-        { scanId: sId, artifactType: 'security_findings', data: analysisOutput.securityFindings },
-        { scanId: sId, artifactType: 'folder_tree', data: analysisOutput.folderTree },
-        { scanId: sId, artifactType: 'ai_summary', data: aiSummary },
-      ];
+    // If tree was truncated by GitHub, record warning diagnostic
+    if (treeResult.truncated) {
+      analysisOutput.statistics.skippedReasons['GitHub API truncated tree (exceeded 100,000 repository entries)'] = 1;
+    }
 
-      // Upsert artifacts
-      for (const artifact of artifactsToSave) {
-        await ScanArtifact.findOneAndUpdate(
+    // 6. Generate AI Insights (Gemini or Fallback)
+    await this.updateProgress(scanId, 'generating_ai_insights', 85);
+    const aiSummary = await aiProvider.generateSummary({
+      repoName: parsedUrl.displayName,
+      commitSha,
+      statistics: analysisOutput.statistics,
+      technologies: analysisOutput.technologies,
+      endpoints: analysisOutput.endpoints,
+      databaseModels: analysisOutput.databaseModels,
+      securityFindings: analysisOutput.securityFindings,
+    });
+
+    // 7. Persist Artifacts in Database Concurrently
+    const sId = new mongoose.Types.ObjectId(scanId);
+    const artifactsToSave = [
+      { scanId: sId, artifactType: 'statistics', data: analysisOutput.statistics },
+      { scanId: sId, artifactType: 'technologies', data: analysisOutput.technologies },
+      { scanId: sId, artifactType: 'endpoints', data: analysisOutput.endpoints },
+      { scanId: sId, artifactType: 'database_models', data: analysisOutput.databaseModels },
+      { scanId: sId, artifactType: 'architecture_graph', data: analysisOutput.architectureGraph },
+      { scanId: sId, artifactType: 'security_findings', data: analysisOutput.securityFindings },
+      { scanId: sId, artifactType: 'folder_tree', data: analysisOutput.folderTree },
+      { scanId: sId, artifactType: 'ai_summary', data: aiSummary },
+    ];
+
+    // High performance concurrent upsert
+    await Promise.all(
+      artifactsToSave.map((artifact) =>
+        ScanArtifact.findOneAndUpdate(
           { scanId: artifact.scanId, artifactType: artifact.artifactType },
           { data: artifact.data },
           { upsert: true }
-        );
-      }
+        )
+      )
+    );
 
-      // Mark Scan completed
-      await Scan.findByIdAndUpdate(scanId, {
-        status: 'completed',
-        stage: 'completed',
-        progressPercentage: 100,
-        completedAt: new Date(),
-        summaryMetrics: analysisOutput.summaryMetrics,
-      });
+    // Mark Scan completed
+    await Scan.findByIdAndUpdate(scanId, {
+      status: 'completed',
+      stage: 'completed',
+      progressPercentage: 100,
+      completedAt: new Date(),
+      summaryMetrics: analysisOutput.summaryMetrics,
+    });
 
     console.log(`[ScanQueue] Scan ${scanId} completed successfully!`);
   }

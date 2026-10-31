@@ -9,6 +9,19 @@ export function redactSecret(secret: string): string {
   return `${prefix}${'*'.repeat(Math.max(4, secret.length - 5))}${suffix}`;
 }
 
+// Pre-compiled regex patterns hoisted to module scope for zero-allocation reuse across scans
+const SECRET_PATTERNS = [
+  { regex: /AKIA[0-9A-Z]{16}/, title: 'Hardcoded AWS Access Key ID' },
+  { regex: /ghp_[a-zA-Z0-9]{36}/, title: 'Hardcoded GitHub Personal Access Token' },
+  { regex: /sk_live_[0-9a-zA-Z]{24,}/, title: 'Hardcoded Stripe Live Secret Key' },
+  { regex: /sk-[a-zA-Z0-9]{32,}/, title: 'Hardcoded OpenAI Secret Key' },
+  { regex: /AIza[0-9A-Za-z_-]{20,}/, title: 'Hardcoded Google API Key' },
+  { regex: /xox[baprs]-[0-9a-zA-Z-]{10,}/, title: 'Hardcoded Slack Token' },
+  { regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, title: 'Hardcoded Cryptographic Private Key' },
+  { regex: /mongodb(?:\+srv)?:\/\/[^:]+:([^@]+)@/, title: 'Hardcoded MongoDB URI with Plaintext Password' },
+  { regex: /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"]([a-zA-Z0-9_\-.~]{16,})['"]/i, title: 'Potential Hardcoded Secret or API Key' },
+];
+
 export function runSecurityScan(
   files: { path: string; content: string }[],
   routes: RouteFinding[]
@@ -44,18 +57,7 @@ export function runSecurityScan(
     }
   }
 
-  // 2. Scan file content lines for patterns (specific patterns first, followed by generic fallback)
-  const SECRET_PATTERNS = [
-    { regex: /AKIA[0-9A-Z]{16}/, title: 'Hardcoded AWS Access Key ID' },
-    { regex: /ghp_[a-zA-Z0-9]{36}/, title: 'Hardcoded GitHub Personal Access Token' },
-    { regex: /sk_live_[0-9a-zA-Z]{24,}/, title: 'Hardcoded Stripe Live Secret Key' },
-    { regex: /sk-[a-zA-Z0-9]{32,}/, title: 'Hardcoded OpenAI Secret Key' },
-    { regex: /AIza[0-9A-Za-z_-]{20,}/, title: 'Hardcoded Google API Key' },
-    { regex: /xox[baprs]-[0-9a-zA-Z-]{10,}/, title: 'Hardcoded Slack Token' },
-    { regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, title: 'Hardcoded Cryptographic Private Key' },
-    { regex: /mongodb(?:\+srv)?:\/\/[^:]+:([^@]+)@/, title: 'Hardcoded MongoDB URI with Plaintext Password' },
-    { regex: /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"]([a-zA-Z0-9_\-.~]{16,})['"]/i, title: 'Potential Hardcoded Secret or API Key' },
-  ];
+  // 2. Scan file content lines for patterns (using hoisted regex array)
 
   for (const file of files) {
     if (!/\.[jt]sx?$/.test(file.path)) continue;

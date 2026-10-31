@@ -27,6 +27,20 @@ const EnvSchema = z.object({
   GITHUB_TOKEN: z.string().default(''),
   GEMINI_API_KEY: z.string().default(''),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  MAX_CONCURRENT_SCANS: z
+    .string()
+    .default('2')
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !isNaN(val) && val >= 1 && val <= 10, {
+      message: 'MAX_CONCURRENT_SCANS must be between 1 and 10',
+    }),
+  FILE_INGESTION_CONCURRENCY: z
+    .string()
+    .default('8')
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !isNaN(val) && val >= 1 && val <= 20, {
+      message: 'FILE_INGESTION_CONCURRENCY must be between 1 and 20',
+    }),
 });
 
 const parsedEnv = EnvSchema.safeParse(process.env);
@@ -51,6 +65,8 @@ const validated = parsedEnv.success
       GITHUB_TOKEN: '',
       GEMINI_API_KEY: '',
       GEMINI_MODEL: 'gemini-2.5-flash',
+      MAX_CONCURRENT_SCANS: 2,
+      FILE_INGESTION_CONCURRENCY: 8,
     };
 
 export const config = {
@@ -61,4 +77,6 @@ export const config = {
   githubToken: validated.GITHUB_TOKEN,
   geminiApiKey: validated.GEMINI_API_KEY,
   geminiModel: validated.GEMINI_MODEL,
+  maxConcurrentScans: validated.MAX_CONCURRENT_SCANS,
+  fileIngestionConcurrency: validated.FILE_INGESTION_CONCURRENCY,
 };

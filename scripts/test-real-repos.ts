@@ -100,18 +100,25 @@ async function runRealRepoTests() {
       console.log(`  -> Fetching sample batch of ${sample.length} files...`);
 
       const rawFiles: RawRepoFile[] = [];
-      for (const item of sample) {
-        try {
-          const content = await client.fetchRawFile(t.owner, t.repo, commitSha, item.path);
-          rawFiles.push({
-            path: item.path,
-            content,
-            sizeBytes: item.size || Buffer.byteLength(content),
-          });
-        } catch {
-          // Skip if missing
+      const concurrency = 8;
+      let nextIndex = 0;
+      const worker = async () => {
+        while (nextIndex < sample.length) {
+          const idx = nextIndex++;
+          const item = sample[idx];
+          try {
+            const content = await client.fetchRawFile(t.owner, t.repo, commitSha, item.path);
+            rawFiles.push({
+              path: item.path,
+              content,
+              sizeBytes: item.size || Buffer.byteLength(content),
+            });
+          } catch {
+            // Skip if missing
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, sample.length) }, () => worker()));
 
       // 4. Run Deterministic Analysis
       const analysis = runDeterministicAnalysis(rawFiles);

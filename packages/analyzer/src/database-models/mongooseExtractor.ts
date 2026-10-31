@@ -2,19 +2,21 @@ import ts from 'typescript';
 import type { DatabaseModelFinding, ModelField, ModelIndex } from '@repo-analyzer/shared';
 
 export function extractMongooseModels(
-  sourceFiles: { path: string; content: string }[]
+  sourceFiles: { path: string; content: string; ast?: ts.SourceFile }[]
 ): DatabaseModelFinding[] {
   const models: DatabaseModelFinding[] = [];
 
   for (const file of sourceFiles) {
     if (!/\.[jt]sx?$/.test(file.path)) continue;
 
-    const sourceFile = ts.createSourceFile(
-      file.path,
-      file.content,
-      ts.ScriptTarget.Latest,
-      true
-    );
+    const sourceFile =
+      file.ast ||
+      ts.createSourceFile(
+        file.path,
+        file.content,
+        ts.ScriptTarget.Latest,
+        true
+      );
 
     // Track schemas discovered in this file
     const schemaMap = new Map<string, { fields: ModelField[]; indexes: ModelIndex[]; lineNumber: number }>();

@@ -11,6 +11,7 @@ import type {
   LanguageStat,
 } from '@repo-analyzer/shared';
 import path from 'path';
+import ts from 'typescript';
 
 import { filterRepoFile, MAX_ANALYZE_FILES_COUNT } from './ingestion/filter.js';
 import { buildFolderTree } from './ingestion/folderTree.js';
@@ -153,11 +154,24 @@ export function runDeterministicAnalysis(
   // Technologies
   const technologies = detectTechnologies(analyzedFiles);
 
-  // AST Express Route Extraction
-  const endpoints = extractExpressRoutes(analyzedFiles);
+  // Single-pass AST generation: parse each JS/TS file once and share AST across extractors
+  const parsedSourceFiles: { path: string; content: string; ast?: ts.SourceFile }[] = analyzedFiles.map((f) => {
+    if (/\.[jt]sx?$/.test(f.path)) {
+      try {
+        const ast = ts.createSourceFile(f.path, f.content, ts.ScriptTarget.Latest, true);
+        return { path: f.path, content: f.content, ast };
+      } catch {
+        return { path: f.path, content: f.content };
+      }
+    }
+    return { path: f.path, content: f.content };
+  });
 
-  // AST Mongoose Models
-  const databaseModels = extractMongooseModels(analyzedFiles);
+  // AST Express Route Extraction (reuses parsedSourceFiles)
+  const endpoints = extractExpressRoutes(parsedSourceFiles);
+
+  // AST Mongoose Models (reuses parsedSourceFiles)
+  const databaseModels = extractMongooseModels(parsedSourceFiles);
 
   // Static Security Observations
   const securityFindings = runSecurityScan(analyzedFiles, endpoints);

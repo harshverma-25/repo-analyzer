@@ -100,6 +100,7 @@ const ScanSchema = new Schema<IScanDocument>(
 );
 
 ScanSchema.index({ projectId: 1, commitSha: 1 });
+ScanSchema.index({ projectId: 1, status: 1 });
 ScanSchema.index({ createdAt: -1 });
 
 export const Scan = (mongoose.models.Scan as mongoose.Model<IScanDocument>) ||

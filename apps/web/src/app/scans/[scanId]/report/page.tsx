@@ -54,6 +54,7 @@ export default function ScanReportPage() {
   const [endpointSearch, setEndpointSearch] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<string>('ALL');
   const [selectedEndpoint, setSelectedEndpoint] = useState<RouteFinding | null>(null);
+  const [visibleEndpointsCount, setVisibleEndpointsCount] = useState(50);
 
   // Security filter state
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
@@ -527,7 +528,7 @@ export default function ScanReportPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredEndpoints.map((ep) => {
+              {filteredEndpoints.slice(0, visibleEndpointsCount).map((ep) => {
                 const methodColors: Record<string, string> = {
                   GET: 'text-blue-400 bg-blue-950/70 border-blue-800',
                   POST: 'text-emerald-400 bg-emerald-950/70 border-emerald-800',
@@ -574,6 +575,17 @@ export default function ScanReportPage() {
                   </div>
                 );
               })}
+
+              {filteredEndpoints.length > visibleEndpointsCount && (
+                <div className="pt-2 text-center">
+                  <button
+                    onClick={() => setVisibleEndpointsCount((prev) => prev + 50)}
+                    className="px-4 py-2 bg-surface hover:bg-surfaceHover border border-border rounded-lg text-xs font-mono text-primary font-semibold transition-colors"
+                  >
+                    Show more endpoints ({filteredEndpoints.length - visibleEndpointsCount} remaining)
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

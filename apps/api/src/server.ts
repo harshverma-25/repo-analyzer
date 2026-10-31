@@ -1,6 +1,7 @@
 import express, { type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import { config } from './config/index.js';
 import { connectDatabase, disconnectDatabase } from '@repo-analyzer/database';
 import { apiRouter } from './routes/index.js';
@@ -16,6 +17,9 @@ app.use(
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
+
+// Performance: Response compression for JSON payloads
+app.use(compression());
 
 // Middlewares
 const allowedOrigins = config.corsOrigin === '*'

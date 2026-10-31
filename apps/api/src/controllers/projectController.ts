@@ -5,7 +5,7 @@ import type { ApiResponse } from '@repo-analyzer/shared';
 
 export async function getProjects(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
-    const projects = await Project.find().sort({ createdAt: -1 }).limit(50);
+    const projects = await Project.find().sort({ createdAt: -1 }).limit(50).lean();
     return res.json({
       success: true,
       data: projects,
@@ -27,7 +27,7 @@ export async function getProjectById(req: Request, res: Response<ApiResponse>, n
       });
     }
 
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(projectId).lean();
     if (!project) {
       return res.status(404).json({
         success: false,
@@ -57,7 +57,9 @@ export async function getProjectScans(req: Request, res: Response<ApiResponse>, 
       });
     }
 
-    const scans = await Scan.find({ projectId: new mongoose.Types.ObjectId(projectId) }).sort({ createdAt: -1 });
+    const scans = await Scan.find({ projectId: new mongoose.Types.ObjectId(projectId) })
+      .sort({ createdAt: -1 })
+      .lean();
     return res.json({
       success: true,
       data: scans,
