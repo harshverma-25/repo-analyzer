@@ -365,12 +365,16 @@ export const CreateScanRequestSchema = z.object({
           'Must be a valid public GitHub repository URL (e.g. https://github.com/expressjs/express)',
       }
     ),
-  branch: z.string().trim().optional(),
+  branch: z.string().trim().max(100, 'Branch name cannot exceed 100 characters').optional(),
 });
 export type CreateScanRequest = z.infer<typeof CreateScanRequestSchema>;
 
 export const AIExplainRequestSchema = z.object({
-  question: z.string().trim().min(3, 'Question must be at least 3 characters'),
+  question: z
+    .string()
+    .trim()
+    .min(3, 'Question must be at least 3 characters')
+    .max(500, 'Question cannot exceed 500 characters'),
 });
 export type AIExplainRequest = z.infer<typeof AIExplainRequestSchema>;
 

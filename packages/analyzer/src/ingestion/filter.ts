@@ -52,12 +52,21 @@ const SENSITIVE_SECRET_FILENAMES = new Set([
   '.env.production',
   '.env.development',
   '.env.test',
+  '.env.staging',
   'id_rsa',
+  'id_dsa',
+  'id_ecdsa',
   'id_ed25519',
   'credentials.json',
   'service-account.json',
   'secrets.json',
   'token.json',
+  '.npmrc',
+  '.pypirc',
+  '.netrc',
+  '.htpasswd',
+  'dockercfg',
+  'authorized_keys',
 ]);
 
 const SENSITIVE_SECRET_EXTENSIONS = new Set([
@@ -67,6 +76,11 @@ const SENSITIVE_SECRET_EXTENSIONS = new Set([
   '.pfx',
   '.crt',
   '.cer',
+  '.der',
+  '.p8',
+  '.kdb',
+  '.keystore',
+  '.jks',
 ]);
 
 export const MAX_FILE_SIZE_BYTES = 500 * 1024; // 500 KB limit for AST parsing

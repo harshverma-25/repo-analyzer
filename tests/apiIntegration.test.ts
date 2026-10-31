@@ -34,6 +34,19 @@ test('API Integration — validates input payloads strictly using Zod', () => {
     question: '',
   });
   assert.equal(invalidAi.success, false);
+
+  // Oversized question (> 500 characters)
+  const oversizedAi = AIExplainRequestSchema.safeParse({
+    question: 'A'.repeat(501),
+  });
+  assert.equal(oversizedAi.success, false);
+
+  // Oversized branch name (> 100 characters)
+  const oversizedBranch = CreateScanRequestSchema.safeParse({
+    repoUrl: 'https://github.com/expressjs/express',
+    branch: 'x'.repeat(101),
+  });
+  assert.equal(oversizedBranch.success, false);
 });
 
 test('API Integration — FallbackAIProvider reliably produces complete grounded summaries without live API keys', async () => {

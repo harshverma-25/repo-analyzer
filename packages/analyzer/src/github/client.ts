@@ -61,6 +61,16 @@ export async function safeFetch(
     throw new Error(`Access to unapproved host "${host}" is blocked for SSRF prevention.`);
   }
 
+  // Reject non-standard ports (enforce default HTTPS port 443 only)
+  if (parsed.port && parsed.port !== '443') {
+    throw new Error(`Non-standard port "${parsed.port}" is blocked for SSRF prevention.`);
+  }
+
+  // Reject embedded credentials in URL
+  if (parsed.username || parsed.password) {
+    throw new Error('Embedded credentials in URLs are blocked for security.');
+  }
+
   // Enforce request timeout
   const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const signal = options?.signal
@@ -80,8 +90,17 @@ export async function safeFetch(
       throw new Error(`Received HTTP ${res.status} redirect without a location header.`);
     }
 
-    const nextUrl = new URL(location, url).toString();
-    return safeFetch(nextUrl, options, redirectCount + 1);
+    const nextUrl = new URL(location, url);
+    const nextOptions: RequestInit = { ...options };
+
+    // Strip authorization header if redirected across domains to prevent token leakage
+    if (nextUrl.hostname.toLowerCase() !== host && nextOptions.headers) {
+      const headers = new Headers(nextOptions.headers as HeadersInit);
+      headers.delete('authorization');
+      nextOptions.headers = headers;
+    }
+
+    return safeFetch(nextUrl.toString(), nextOptions, redirectCount + 1);
   }
 
   return res;
@@ -180,9 +199,24 @@ export class GitHubClient {
     const cleanRepo = encodeURIComponent(repo.trim());
     const cleanSha = encodeURIComponent(commitSha.trim());
 
-    // Sanitize path against directory traversal
+    // Sanitize path against directory traversal and null-byte injection
+    if (filePath.includes('\0')) {
+      throw new Error('Null byte detected in file path');
+    }
+
     const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
     if (normalized.includes('..')) {
+      throw new Error('Path traversal sequence detected in file path');
+    }
+
+    let decoded = filePath;
+    try {
+      decoded = decodeURIComponent(filePath);
+    } catch {
+      // If decode fails, proceed with validated normalized string
+    }
+
+    if (decoded.includes('..')) {
       throw new Error('Path traversal sequence detected in file path');
     }
 

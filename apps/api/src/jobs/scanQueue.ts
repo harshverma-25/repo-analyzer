@@ -73,9 +73,44 @@ class ScanQueue {
     const client = new GitHubClient();
     const aiProvider = getAIProvider();
 
+    // 5-minute global timeout guard per scan job
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error('Scan execution timed out after 5 minutes'));
+      }, 5 * 60 * 1000);
+    });
+
     try {
-      // 1. Stage: validating
-      await this.updateProgress(scanId, 'validating', 10);
+      await Promise.race([
+        this.performScanPipeline(scanId, projectId, repoUrl, branch, client, aiProvider),
+        timeoutPromise,
+      ]);
+    } catch (error: any) {
+      console.error(`[ScanQueue] Scan ${scanId} failed:`, error);
+      await Scan.findByIdAndUpdate(scanId, {
+        status: 'failed',
+        stage: 'failed',
+        errorMessage: error.message || 'An error occurred during repository analysis.',
+      });
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private async performScanPipeline(
+    scanId: string,
+    projectId: string,
+    repoUrl: string,
+    branch: string | undefined,
+    client: GitHubClient,
+    aiProvider: any
+  ) {
+
+    // 1. Stage: validating
+    await this.updateProgress(scanId, 'validating', 10);
       const parsedUrl = parseAndValidateGitHubUrl(repoUrl);
 
       // 2. Stage: resolving_revision
@@ -197,15 +232,7 @@ class ScanQueue {
         summaryMetrics: analysisOutput.summaryMetrics,
       });
 
-      console.log(`[ScanQueue] Scan ${scanId} completed successfully!`);
-    } catch (error: any) {
-      console.error(`[ScanQueue] Scan ${scanId} failed:`, error);
-      await Scan.findByIdAndUpdate(scanId, {
-        status: 'failed',
-        stage: 'failed',
-        errorMessage: error.message || 'An error occurred during repository analysis.',
-      });
-    }
+    console.log(`[ScanQueue] Scan ${scanId} completed successfully!`);
   }
 
   private async updateProgress(scanId: string, stage: string, progressPercentage: number) {

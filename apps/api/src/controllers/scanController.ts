@@ -23,12 +23,31 @@ export async function createScan(req: Request, res: Response<ApiResponse>, next:
     });
 
     if (!project) {
-      project = await Project.create({
-        owner: parsed.owner.toLowerCase(),
-        repo: parsed.repo.toLowerCase(),
-        canonicalUrl: parsed.canonicalUrl,
-        displayName: parsed.displayName,
-        defaultBranch: validated.branch || 'main',
+      try {
+        project = await Project.create({
+          owner: parsed.owner.toLowerCase(),
+          repo: parsed.repo.toLowerCase(),
+          canonicalUrl: parsed.canonicalUrl,
+          displayName: parsed.displayName,
+          defaultBranch: validated.branch || 'main',
+        });
+      } catch (err: any) {
+        if (err.code === 11000) {
+          project = await Project.findOne({
+            owner: parsed.owner.toLowerCase(),
+            repo: parsed.repo.toLowerCase(),
+          });
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!project) {
+      return res.status(500).json({
+        success: false,
+        data: null,
+        error: { code: 'DATABASE_ERROR', message: 'Unable to initialize project record.' },
       });
     }
 

@@ -136,14 +136,16 @@ export function buildArchitectureGraph(
   const topRoutes = routes.slice(0, 10);
   for (const r of topRoutes) {
     const safeId = `R_${r.method}_${r.resolvedPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    mermaidText += `    ${safeId}["[${r.method}] ${r.resolvedPath}"]\n`;
+    const safeLabel = `[${r.method}] ${r.resolvedPath}`.replace(/"/g, '&quot;');
+    mermaidText += `    ${safeId}["${safeLabel}"]\n`;
   }
   mermaidText += '  end\n';
 
   if (models.length > 0) {
     mermaidText += '  subgraph Database_Layer ["Database Models"]\n';
     for (const m of models) {
-      mermaidText += `    M_${m.modelName}["${m.modelName} Schema"]\n`;
+      const safeModelLabel = `${m.modelName} Schema`.replace(/"/g, '&quot;');
+      mermaidText += `    M_${m.modelName}["${safeModelLabel}"]\n`;
     }
     mermaidText += '    DB[(MongoDB)]\n';
     for (const m of models) {

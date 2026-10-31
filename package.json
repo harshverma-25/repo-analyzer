@@ -4,7 +4,7 @@
   "private": true,
   "description": "Static repository analyzer and Gemini-powered architecture explainer",
   "scripts": {
-    "dev": "turbo run dev --parallel",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "tsx --test tests/**/*.test.ts",
     "lint": "turbo run lint",

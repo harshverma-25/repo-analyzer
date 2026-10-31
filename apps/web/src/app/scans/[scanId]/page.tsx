@@ -57,12 +57,14 @@ export default function ScanProgressPage() {
 
     let isMounted = true;
     let timer: NodeJS.Timeout;
+    let consecutiveErrors = 0;
 
     const poll = async () => {
       try {
         const data = await getScanStatus(scanId);
         if (!isMounted) return;
         setScan(data);
+        consecutiveErrors = 0;
 
         if (data.status === 'completed') {
           // Redirect to full report dashboard
@@ -75,7 +77,13 @@ export default function ScanProgressPage() {
         }
       } catch (err: any) {
         if (!isMounted) return;
-        setError(err.message || 'Failed to poll scan status');
+        consecutiveErrors++;
+        // Retry transient errors up to 5 times with backoff before failing permanently
+        if (consecutiveErrors <= 5) {
+          timer = setTimeout(poll, 2500);
+        } else {
+          setError(err.message || 'Failed to poll scan status. Please check your network connection.');
+        }
       }
     };
 

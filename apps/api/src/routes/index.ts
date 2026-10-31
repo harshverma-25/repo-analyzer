@@ -21,6 +21,23 @@ export const apiRouter: IRouter = Router();
 // ==========================================
 // Rate Limiters for Security & Abuse Prevention
 // ==========================================
+const apiGeneralLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Limit each client to 300 requests per window across all endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    data: null,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many requests from this client. Please try again after 15 minutes.',
+    },
+  },
+});
+
+apiRouter.use(apiGeneralLimiter);
+
 const scanCreateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 15, // Limit each IP to 15 scan requests per window
