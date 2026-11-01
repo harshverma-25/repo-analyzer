@@ -10,31 +10,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        border: 'hsl(215 28% 17%)',
-        background: 'hsl(222 47% 7%)',
-        surface: 'hsl(222 47% 11%)',
-        surfaceHover: 'hsl(217 33% 17%)',
+        border: 'hsl(var(--border) / <alpha-value>)',
+        'border-subtle': 'hsl(var(--border-subtle) / <alpha-value>)',
+        background: 'hsl(var(--background) / <alpha-value>)',
+        surface: 'hsl(var(--surface) / <alpha-value>)',
+        surfaceHover: 'hsl(var(--surface-hover) / <alpha-value>)',
+        'surface-elevated': 'hsl(var(--surface-elevated) / <alpha-value>)',
         primary: {
-          DEFAULT: 'hsl(217 91% 60%)',
-          hover: 'hsl(217 91% 52%)',
-          muted: 'hsl(217 91% 60% / 0.15)',
+          DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
+          hover: 'hsl(var(--primary-hover) / <alpha-value>)',
+          muted: 'hsl(var(--primary-muted))',
         },
-        accent: 'hsl(190 95% 42%)',
+        accent: {
+          DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+          muted: 'hsl(var(--accent-muted))',
+        },
         text: {
-          main: 'hsl(210 40% 98%)',
-          muted: 'hsl(215 20% 65%)',
-          subtle: 'hsl(215 16% 47%)',
-        },
-        badge: {
-          get: 'hsl(217 91% 60%)',
-          post: 'hsl(142 71% 45%)',
-          put: 'hsl(38 92% 50%)',
-          delete: 'hsl(0 84% 60%)',
-          patch: 'hsl(262 83% 58%)',
+          main: 'hsl(var(--text-main) / <alpha-value>)',
+          muted: 'hsl(var(--text-muted) / <alpha-value>)',
+          subtle: 'hsl(var(--text-subtle) / <alpha-value>)',
         },
       },
       fontFamily: {
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['var(--font-sans)', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+      },
+      boxShadow: {
+        subtle: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        elevated: '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04)',
       },
     },
   },

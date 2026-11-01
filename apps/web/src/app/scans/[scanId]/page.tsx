@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   CheckCircle2,
@@ -12,6 +12,8 @@ import {
   Sparkles,
   RefreshCw,
   ArrowRight,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { getScanStatus } from '../../../lib/api';
 import type { ScanMetadata, ScanStage } from '@repo-analyzer/shared';
@@ -30,7 +32,7 @@ const STAGES: { stage: ScanStage; label: string; description: string }[] = [
   {
     stage: 'fetching_tree',
     label: 'Retrieving Git Tree',
-    description: 'Recursively enumerating tree; filtering lockfiles, binaries, and vendor dependencies.',
+    description: 'Enumerating tree; filtering lockfiles, binaries, and vendor dependencies.',
   },
   {
     stage: 'analyzing_code',
@@ -51,6 +53,7 @@ export default function ScanProgressPage() {
 
   const [scan, setScan] = useState<ScanMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
 
   useEffect(() => {
     if (!scanId) return;
@@ -67,7 +70,6 @@ export default function ScanProgressPage() {
         consecutiveErrors = 0;
 
         if (data.status === 'completed') {
-          // Redirect to full report dashboard
           router.push(`/scans/${scanId}/report`);
           return;
         }
@@ -78,11 +80,10 @@ export default function ScanProgressPage() {
       } catch (err: any) {
         if (!isMounted) return;
         consecutiveErrors++;
-        // Retry transient errors up to 5 times with backoff before failing permanently
         if (consecutiveErrors <= 5) {
           timer = setTimeout(poll, 2500);
         } else {
-          setError(err.message || 'Failed to poll scan status. Please check your network connection.');
+          setError(err.message || 'Failed to poll scan status. Please check your connection.');
         }
       }
     };
@@ -95,48 +96,66 @@ export default function ScanProgressPage() {
     };
   }, [scanId, router]);
 
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(scanId);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
   const currentStageIndex = STAGES.findIndex((s) => s.stage === scan?.stage);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
-      <div className="max-w-xl w-full bg-surface border border-border rounded-2xl p-6 sm:p-8 shadow-2xl">
-        <div className="flex items-center justify-between pb-6 border-b border-border">
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8 text-left">
+      <div className="max-w-xl w-full bg-surface border border-border rounded-2xl p-6 sm:p-8 shadow-elevated space-y-6">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between pb-5 border-b border-border">
           <div>
             <h2 className="text-lg font-bold text-text-main flex items-center space-x-2">
               <span>Scan in Progress</span>
-              <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             </h2>
-            <p className="text-xs font-mono text-text-subtle mt-0.5">
-              ID: {scanId}
-            </p>
+            <div className="flex items-center space-x-1.5 mt-1 text-xs font-mono text-text-subtle">
+              <span>ID: {scanId}</span>
+              <button
+                onClick={handleCopyId}
+                className="hover:text-text-main transition-colors"
+                title="Copy Scan ID"
+              >
+                {copiedId ? (
+                  <Check className="w-3 h-3 text-emerald-500" />
+                ) : (
+                  <Copy className="w-3 h-3" />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="text-right">
-            <span className="text-2xl font-bold font-mono text-primary">
+            <span className="text-3xl font-extrabold font-mono text-primary">
               {scan?.progressPercentage || 0}%
             </span>
           </div>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full bg-background rounded-full h-2 my-6 overflow-hidden border border-border/60">
+        <div className="w-full bg-background rounded-full h-2 overflow-hidden border border-border/70">
           <div
             className="bg-gradient-to-r from-primary to-accent h-2 transition-all duration-500 ease-out rounded-full"
             style={{ width: `${Math.max(5, scan?.progressPercentage || 5)}%` }}
-          ></div>
+          />
         </div>
 
-        {/* Status Error Display */}
+        {/* Error Notice */}
         {scan?.status === 'failed' && (
-          <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-200 text-xs space-y-2">
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 text-xs space-y-2">
             <div className="flex items-center space-x-2 font-semibold">
-              <AlertCircle className="w-4 h-4 text-red-400" />
+              <AlertCircle className="w-4 h-4 text-rose-500" />
               <span>Analysis Pipeline Failed</span>
             </div>
-            <p className="font-mono">{scan.errorMessage || 'Unknown error occurred.'}</p>
+            <p className="font-mono text-[11px]">{scan.errorMessage || 'An error occurred during analysis.'}</p>
             <button
               onClick={() => router.push('/')}
-              className="mt-2 px-3 py-1.5 bg-red-800 hover:bg-red-700 text-white rounded text-xs transition-colors flex items-center space-x-1.5"
+              className="mt-2 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Start New Scan</span>
@@ -145,25 +164,26 @@ export default function ScanProgressPage() {
         )}
 
         {/* Stages Checklist */}
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {STAGES.map((s, idx) => {
             const isCompleted = currentStageIndex > idx || scan?.status === 'completed';
-            const isCurrent = currentStageIndex === idx && scan?.status !== 'completed' && scan?.status !== 'failed';
+            const isCurrent =
+              currentStageIndex === idx && scan?.status !== 'completed' && scan?.status !== 'failed';
 
             return (
               <div
                 key={s.stage}
-                className={`flex items-start space-x-3.5 p-3 rounded-lg border transition-all ${
+                className={`flex items-start space-x-3.5 p-3 rounded-xl border transition-all ${
                   isCurrent
-                    ? 'bg-primary/10 border-primary/40 text-text-main'
+                    ? 'bg-primary/5 border-primary/40 text-text-main shadow-subtle'
                     : isCompleted
-                    ? 'bg-surfaceHover/50 border-border/40 text-text-muted'
-                    : 'bg-transparent border-transparent text-text-subtle opacity-60'
+                    ? 'bg-surfaceHover/50 border-border text-text-muted'
+                    : 'bg-transparent border-transparent text-text-subtle opacity-50'
                 }`}
               >
                 <div className="mt-0.5 shrink-0">
                   {isCompleted ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   ) : isCurrent ? (
                     <Loader2 className="w-4 h-4 text-primary animate-spin" />
                   ) : (
@@ -182,11 +202,12 @@ export default function ScanProgressPage() {
           })}
         </div>
 
+        {/* Completed CTA */}
         {scan?.status === 'completed' && (
-          <div className="mt-6 pt-4 border-t border-border flex justify-end">
+          <div className="pt-4 border-t border-border flex justify-end">
             <button
               onClick={() => router.push(`/scans/${scanId}/report`)}
-              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-medium rounded-lg flex items-center space-x-2 transition-colors"
+              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-lg flex items-center space-x-2 transition-colors shadow-sm"
             >
               <span>View Full Report</span>
               <ArrowRight className="w-3.5 h-3.5" />

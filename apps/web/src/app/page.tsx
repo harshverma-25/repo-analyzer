@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search,
@@ -13,8 +13,11 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
+  Github,
+  Loader2,
 } from 'lucide-react';
 import { createScan } from '../lib/api';
+import { HeroPreview } from '../components/hero-preview';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -23,9 +26,30 @@ export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Subtle live validation
+  const isValidGitHubUrl = (url: string) => {
+    if (!url.trim()) return null;
+    try {
+      const parsed = new URL(url.trim());
+      return (
+        parsed.hostname.toLowerCase() === 'github.com' &&
+        /^\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+(\/)?$/.test(parsed.pathname)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const validationState = isValidGitHubUrl(repoUrl);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repoUrl.trim()) return;
+    if (!repoUrl.trim() || isLoading) return;
+
+    if (validationState === false) {
+      setErrorMessage('Please enter a valid GitHub repository URL (e.g. https://github.com/expressjs/express)');
+      return;
+    }
 
     setIsLoading(true);
     setErrorMessage(null);
@@ -44,163 +68,205 @@ export default function LandingPage() {
     setErrorMessage(null);
   };
 
+  const featureItems = [
+    {
+      id: 'apis',
+      title: 'APIs',
+      description: 'Resolved routes, parameters & status codes',
+      icon: Code2,
+      badge: 'AST Discovery',
+    },
+    {
+      id: 'models',
+      title: 'Models',
+      description: 'Mongoose schemas, types & references',
+      icon: Database,
+      badge: 'Schema Mapping',
+    },
+    {
+      id: 'architecture',
+      title: 'Architecture',
+      description: 'Route &rarr; Controller &rarr; Model graphs',
+      icon: Layers,
+      badge: 'Interactive Flow',
+    },
+    {
+      id: 'security',
+      title: 'Security',
+      description: 'Token redaction, eval & auth checks',
+      icon: ShieldCheck,
+      badge: 'Static Audit',
+    },
+    {
+      id: 'ai',
+      title: 'AI Insights',
+      description: 'Gemini synthesis with zero hallucination',
+      icon: Sparkles,
+      badge: 'Grounded QA',
+    },
+  ];
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
-      <div className="max-w-4xl w-full text-center space-y-8">
-        {/* Badge */}
-        <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-xs font-mono text-primary">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>AST Code Analysis + Google Gemini Synthesis</span>
-        </div>
-
-        {/* Title */}
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-text-main">
-          Evidence-Based <br className="hidden sm:inline" />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-blue-400 to-accent">
-            GitHub Repository Understanding
-          </span>
-        </h1>
-
-        <p className="max-w-2xl mx-auto text-base sm:text-lg text-text-muted leading-relaxed">
-          Submit any public GitHub repository. Our static analysis engine maps routes,
-          unveils database models, inspects dependencies, and computes language statistics—synthesized
-          by Google Gemini with zero hallucination.
-        </p>
-
-        {/* Scan Submission Form */}
-        <div className="max-w-2xl mx-auto mt-6">
-          <form
-            onSubmit={handleSubmit}
-            className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border shadow-2xl flex flex-col sm:flex-row gap-2"
-          >
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-text-subtle absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="url"
-                required
-                placeholder="https://github.com/expressjs/express"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                className="w-full bg-background border border-border/60 rounded-lg pl-10 pr-4 py-2.5 text-sm text-text-main placeholder-text-subtle focus:outline-none focus:border-primary transition-colors"
-              />
+    <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+      <div className="max-w-7xl w-full mx-auto space-y-16">
+        {/* ========================================================================= */}
+        {/* HERO SECTION: 2-COLUMN COMPOSITION */}
+        {/* ========================================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+          {/* Left Column: Headline, Description & Repository Input */}
+          <div className="lg:col-span-6 space-y-6 text-left">
+            {/* Trust Pill */}
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/25 text-xs font-mono text-primary">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Evidence-based static code understanding</span>
             </div>
 
-            <div className="relative sm:w-36">
-              <GitBranch className="w-4 h-4 text-text-subtle absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Branch (opt)"
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-                className="w-full bg-background border border-border/60 rounded-lg pl-9 pr-3 py-2.5 text-sm text-text-main placeholder-text-subtle focus:outline-none focus:border-primary transition-colors"
-              />
-            </div>
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold tracking-tight text-text-main leading-[1.15]">
+              Understand any{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-blue-500 to-accent">
+                GitHub repository
+              </span>
+            </h1>
 
-            <button
-              type="submit"
-              disabled={isLoading || !repoUrl.trim()}
-              className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg flex items-center justify-center space-x-2 transition-all disabled:opacity-50 shadow-md shadow-primary/20"
-            >
-              {isLoading ? (
-                <span>Analyzing...</span>
-              ) : (
-                <>
-                  <span>Analyze</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+            {/* Supporting Text */}
+            <p className="text-base sm:text-lg text-text-muted leading-relaxed max-w-xl">
+              Code insights, architecture, APIs, models and security — in seconds.
+            </p>
+
+            {/* Repository Input Component */}
+            <div className="pt-2 max-w-xl space-y-3">
+              <form
+                onSubmit={handleSubmit}
+                className="p-2 rounded-xl bg-surface border border-border shadow-elevated flex flex-col sm:flex-row gap-2 transition-all focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20"
+              >
+                {/* Repository URL Input */}
+                <div className="relative flex-1">
+                  <Github className="w-4 h-4 text-text-subtle absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://github.com/expressjs/express"
+                    value={repoUrl}
+                    onChange={(e) => {
+                      setRepoUrl(e.target.value);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    className="w-full bg-background border border-border/70 rounded-lg pl-10 pr-8 py-2.5 text-xs sm:text-sm text-text-main placeholder-text-subtle focus:outline-none focus:border-primary transition-colors font-mono"
+                  />
+                  {validationState === true && (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                  )}
+                </div>
+
+                {/* Optional Branch Input */}
+                <div className="relative sm:w-32">
+                  <GitBranch className="w-4 h-4 text-text-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Branch"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full bg-background border border-border/70 rounded-lg pl-9 pr-3 py-2.5 text-xs sm:text-sm text-text-main placeholder-text-subtle focus:outline-none focus:border-primary transition-colors font-mono"
+                  />
+                </div>
+
+                {/* Submit Analyze Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading || !repoUrl.trim()}
+                  className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs sm:text-sm font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition-all disabled:opacity-40 shadow-sm whitespace-nowrap cursor-pointer"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Analyzing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Analyze</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Validation Warning Feedback */}
+              {validationState === false && repoUrl.length > 5 && (
+                <div className="text-[11px] text-amber-600 dark:text-amber-400 font-mono flex items-center space-x-1 px-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Format: https://github.com/owner/repository</span>
+                </div>
               )}
-            </button>
-          </form>
 
-          {errorMessage && (
-            <div className="mt-3 p-3 rounded-lg bg-red-950/40 border border-red-800/50 text-red-300 text-xs flex items-center space-x-2 text-left">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-              <span>{errorMessage}</span>
+              {/* Server Error Message */}
+              {errorMessage && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 text-xs flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Sample Repository Shortcuts */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-text-subtle pt-1 font-mono">
+                <span>Try sample:</span>
+                <button
+                  type="button"
+                  onClick={() => setSampleRepo('https://github.com/expressjs/express')}
+                  className="px-2.5 py-1 rounded-md bg-surface border border-border hover:border-primary text-text-muted hover:text-text-main transition-colors text-xs"
+                >
+                  expressjs/express
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSampleRepo('https://github.com/harshverma-25/repo-analyzer')}
+                  className="px-2.5 py-1 rounded-md bg-surface border border-border hover:border-primary text-text-muted hover:text-text-main transition-colors text-xs"
+                >
+                  harshverma-25/repo-analyzer
+                </button>
+              </div>
             </div>
-          )}
+          </div>
 
-          {/* Quick Example Repositories */}
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-text-subtle">
-            <span>Try sample repos:</span>
-            <button
-              type="button"
-              onClick={() => setSampleRepo('https://github.com/expressjs/express')}
-              className="px-2.5 py-1 rounded-md bg-surface border border-border hover:border-primary text-text-muted hover:text-text-main transition-colors font-mono"
-            >
-              expressjs/express
-            </button>
-            <button
-              type="button"
-              onClick={() => setSampleRepo('https://github.com/harshverma-25/repo-analyzer')}
-              className="px-2.5 py-1 rounded-md bg-surface border border-border hover:border-primary text-text-muted hover:text-text-main transition-colors font-mono"
-            >
-              harshverma-25/repo-analyzer
-            </button>
+          {/* Right Column: Sophisticated Product Preview */}
+          <div className="lg:col-span-6 w-full">
+            <HeroPreview />
           </div>
         </div>
 
-        {/* Feature Highlights Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-12 text-left">
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 text-primary flex items-center justify-center mb-3">
-              <Layers className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">AST Express.js Route Extraction</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Traces TypeScript ASTs to resolve nested <code>app.use()</code> mount prefixes, handlers,
-              middleware chains, and status codes.
-            </p>
-          </div>
+        {/* ========================================================================= */}
+        {/* FEATURE NAVIGATION (5 COMPACT FEATURE SHORTCUTS) */}
+        {/* ========================================================================= */}
+        <div className="pt-8 border-t border-border">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {featureItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-xl bg-surface border border-border hover:border-primary/50 transition-all text-left shadow-subtle group space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-[9px] font-mono font-medium text-text-subtle bg-background px-1.5 py-0.5 rounded border border-border">
+                      {item.badge}
+                    </span>
+                  </div>
 
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
-              <Database className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">Mongoose Model Discovery</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Discovers schemas, field definitions, required & unique options, subdocuments, and relational references.
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">Static Security Audit</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Detects hardcoded credentials with automated token redaction, dynamic <code>eval()</code>,
-              and unauthenticated mutations.
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-3">
-              <Code2 className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">Language-Aware Line Metrics</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Measures true source code, blank, and comment lines across 30+ languages rather than byte approximations.
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center mb-3">
-              <GitBranch className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">Interactive Architecture Graphs</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Visualizes Route &rarr; Middleware &rarr; Controller &rarr; Model relationships using React Flow and Mermaid.
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-surface border border-border/70 hover:border-border transition-colors">
-            <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-accent flex items-center justify-center mb-3">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <h3 className="font-semibold text-sm text-text-main mb-1">Grounded Gemini Synthesis</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Synthesizes high-level architecture narratives and answers questions strictly bounded by discovered code facts.
-            </p>
+                  <div>
+                    <h3 className="font-semibold text-xs text-text-main group-hover:text-primary transition-colors">
+                      {item.title}
+                    </h3>
+                    <p
+                      className="text-[11px] text-text-muted leading-snug line-clamp-2 mt-0.5"
+                      dangerouslySetInnerHTML={{ __html: item.description }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

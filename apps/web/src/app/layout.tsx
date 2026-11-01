@@ -1,11 +1,26 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Terminal, History, Github, ShieldAlert, Cpu } from 'lucide-react';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Terminal, ShieldCheck, Cpu } from 'lucide-react';
+import { ThemeProvider } from '../components/theme-provider';
+import { Navbar } from '../components/navbar';
 import './globals.css';
 
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'Repo Analyzer — Static Code Understanding & Architecture Map',
-  description: 'Evidence-based static analysis and grounded Gemini insights for public GitHub repositories.',
+  title: 'Repo Analyzer — Code Insights, Architecture & Security',
+  description:
+    'Evidence-based static code understanding, architecture mapping, and grounded Gemini insights for public GitHub repositories.',
 };
 
 export default function RootLayout({
@@ -14,77 +29,58 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen flex flex-col bg-background text-text-main">
-        {/* Navigation Header */}
-        <header className="border-b border-border bg-surface/80 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              <Link href="/" className="flex items-center space-x-2.5 group">
-                <div className="w-8 h-8 rounded bg-primary/20 border border-primary/40 flex items-center justify-center text-primary group-hover:border-primary transition-colors">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-sm tracking-wide text-text-main group-hover:text-primary transition-colors">
-                    REPO ANALYZER
-                  </span>
-                  <span className="text-[10px] text-text-subtle tracking-wider uppercase font-mono">
-                    Deterministic AST + Gemini
-                  </span>
-                </div>
-              </Link>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        {/* Anti-flash theme script */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('repo-analyzer-theme');
+                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (stored === 'dark' || (!stored && prefersDark)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} min-h-screen flex flex-col bg-background text-text-main font-sans selection:bg-primary/20 selection:text-primary transition-colors duration-150`}
+      >
+        <ThemeProvider>
+          {/* Navigation Header */}
+          <Navbar />
 
-              <nav className="hidden md:flex items-center space-x-1">
-                <Link
-                  href="/projects"
-                  className="px-3 py-1.5 rounded text-xs font-medium text-text-muted hover:text-text-main hover:bg-surfaceHover transition-colors flex items-center space-x-1.5"
-                >
-                  <History className="w-3.5 h-3.5" />
-                  <span>Scan History</span>
-                </Link>
-              </nav>
-            </div>
+          {/* Main Content Area */}
+          <main className="flex-1 flex flex-col">{children}</main>
 
-            <div className="flex items-center space-x-3">
-              <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-surfaceHover border border-border text-[11px] font-mono text-text-muted">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>API v1 Ready</span>
+          {/* Minimalist Developer Footer */}
+          <footer className="border-t border-border bg-surface/50 py-5 px-4 sm:px-6 lg:px-8 text-xs text-text-subtle transition-colors">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center space-x-2">
+                <span className="font-semibold text-text-muted">Repo Analyzer</span>
+                <span>&copy; {new Date().getFullYear()}</span>
+                <span>— Deterministic AST facts & Google Gemini explanations</span>
               </div>
-
-              <a
-                href="https://github.com/harshverma-25/repo-analyzer"
-                target="_blank"
-                rel="noreferrer"
-                className="p-2 text-text-muted hover:text-text-main hover:bg-surfaceHover rounded transition-colors"
-                title="View GitHub Repository"
-              >
-                <Github className="w-4 h-4" />
-              </a>
+              <div className="flex items-center space-x-4 text-[11px] font-mono text-text-muted">
+                <span className="flex items-center space-x-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Static Observations</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <Cpu className="w-3.5 h-3.5 text-primary" />
+                  <span>Zero Code Execution</span>
+                </span>
+              </div>
             </div>
-          </div>
-        </header>
-
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col">{children}</main>
-
-        {/* Footer */}
-        <footer className="border-t border-border bg-surface/40 py-6 px-4 sm:px-6 lg:px-8 text-center text-xs text-text-subtle">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p>
-              Repo Analyzer &copy; 2026. Deterministic static code analysis establishes facts; Google Gemini explains them.
-            </p>
-            <div className="flex items-center space-x-4 text-text-muted">
-              <span className="flex items-center space-x-1">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
-                <span>Static Observations Only</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <Cpu className="w-3.5 h-3.5 text-primary" />
-                <span>Zero Untrusted Code Execution</span>
-              </span>
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </ThemeProvider>
       </body>
     </html>
   );

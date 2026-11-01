@@ -33,13 +33,8 @@ repo-analyzer/
 │   ├── analyzer/          # AST analysis, line counter, Express & Mongoose extractors, security scanner
 │   └── ai/                # Google Gemini provider abstraction & structured prompt pipelines
 ├── docs/                  # In-depth architectural & operational documentation
-│   ├── FULL_PROJECT_AUDIT.md    # Comprehensive technical baseline audit
-│   ├── SECURITY_AUDIT.md        # Security hardening & threat vector review
-│   ├── PERFORMANCE_AUDIT.md     # Initial performance analysis
-│   ├── PERFORMANCE_BASELINE.md  # Formal performance baseline
-│   ├── PERFORMANCE_OPTIMIZATION.md # Performance engineering and architectural optimizations
 │   ├── BENCHMARK_RESULTS.md     # Real-world before/after benchmark results (-77.7% latency)
-│   ├── BUG_FIXES.md             # Defect remediation log
+│   ├── PERFORMANCE_OPTIMIZATION.md # Performance engineering and architectural optimizations
 │   ├── PRODUCTION_READINESS.md  # Production readiness verification checklist
 │   ├── REAL_WORLD_TESTING.md    # Empirical results across 6 real GitHub repos
 │   ├── RELEASE_CHECKLIST.md     # Production release verification checklist
