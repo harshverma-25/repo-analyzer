@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { extractExpressRoutes } from '../packages/analyzer/src/express/routeExtractor.js';
 import { extractMongooseModels } from '../packages/analyzer/src/database-models/mongooseExtractor.js';
 import { runSecurityScan } from '../packages/analyzer/src/security/securityScanner.js';
+import { detectTechnologies } from '../packages/analyzer/src/technologies/detector.js';
 import { ScanQueue } from '../apps/api/src/jobs/scanQueue.js';
 import { ScanStatusEnum, ScanStageEnum } from '../packages/shared/src/index.js';
 
@@ -243,3 +244,101 @@ test('Security Scanner — Suppresses false positives from comments, string lite
   assert.equal(genuineFindings[0].category, 'code_execution');
   assert.equal(genuineFindings[0].title, 'Use of eval() Dynamic Code Execution');
 });
+
+// ============================================================================
+// 7. Analyzer Accuracy — Multiline Comments, Template Literals, and Windows Paths
+// ============================================================================
+test('Analyzer Accuracy — Multiline comments and template strings suppress false positives, and Windows paths are normalized', () => {
+  const multilineFile = [
+    {
+      path: 'src/utils/documentation.ts',
+      content: `
+        /*
+          This is a multiline comment block without asterisks.
+          Avoid using eval(userInput) or exec(command) in your implementations.
+          Access-Control-Allow-Origin: *
+        */
+        const multilineTemplate = \`
+          Some SQL or GraphQL query
+          SELECT * FROM eval(1)
+          WHERE exec("ls") = true
+        \`;
+      `,
+    },
+  ];
+
+  const findings = runSecurityScan(multilineFile, []);
+  assert.equal(findings.length, 0, 'Multiline block comments and template literals must not trigger code execution findings');
+
+  // Verify Windows backslash path suppression in route and model extractors
+  const windowsTestRoutes = extractExpressRoutes([
+    {
+      path: 'tests\\e2e\\server.test.ts',
+      content: `
+        import express from 'express';
+        const testApp = express();
+        testApp.post('/test/api/endpoint', (req, res) => res.json({ ok: true }));
+      `,
+    },
+    {
+      path: 'cypress\\integration\\api.cy.ts',
+      content: `
+        const router = express.Router();
+        router.delete('/cypress/delete', (req, res) => res.send('ok'));
+      `,
+    },
+  ]);
+  assert.equal(windowsTestRoutes.length, 0, 'Windows backslash test and cypress paths must be excluded from extracted routes');
+
+  const windowsTestModels = extractMongooseModels([
+    {
+      path: 'tests\\fixtures\\mockModel.ts',
+      content: `
+        import { Schema, model } from 'mongoose';
+        const MockSchema = new Schema({ test: String });
+        export const MockModel = model('MockModel', MockSchema);
+      `,
+    },
+  ]);
+  assert.equal(windowsTestModels.length, 0, 'Windows backslash test paths must be excluded from extracted Mongoose models');
+});
+
+// ============================================================================
+// 8. Technology Detection — Monorepo Multi-Package & Deep Config Discovery
+// ============================================================================
+test('Technology Detection — Discovers technologies across monorepo subpackages and deep config files', () => {
+  const monorepoFiles = [
+    {
+      path: 'package.json',
+      content: JSON.stringify({ name: 'root', devDependencies: { turbo: '^2.0.0' } }),
+    },
+    {
+      path: 'apps/web/package.json',
+      content: JSON.stringify({ name: '@monorepo/web', dependencies: { react: '^18.2.0', next: '^14.0.0' } }),
+    },
+    {
+      path: 'apps/api/package.json',
+      content: JSON.stringify({ name: '@monorepo/api', dependencies: { express: '^4.19.0', mongoose: '^8.0.0' } }),
+    },
+    {
+      path: 'deploy/docker/docker-compose.yml',
+      content: 'version: "3.8"',
+    },
+    {
+      path: 'apps/web/tsconfig.json',
+      content: '{}',
+    },
+  ];
+
+  const techFindings = detectTechnologies(monorepoFiles);
+  const names = techFindings.map((t) => t.name);
+
+  assert.ok(names.includes('Express.js'), 'Must detect Express.js from subpackage');
+  assert.ok(names.includes('Mongoose'), 'Must detect Mongoose from subpackage');
+  assert.ok(names.includes('React'), 'Must detect React from subpackage');
+  assert.ok(names.includes('Next.js'), 'Must detect Next.js from subpackage');
+  assert.ok(names.includes('Turbo'), 'Must detect Turbo from root package');
+  assert.ok(names.includes('Docker'), 'Must detect Docker from deep compose file');
+  assert.ok(names.includes('TypeScript'), 'Must detect TypeScript from deep tsconfig.json');
+});
+

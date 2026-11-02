@@ -45,7 +45,18 @@ const AUTH_MIDDLEWARE_NAMES = new Set([
   'jwtauth',
   'checkauth',
   'ensureauth',
-  'passport.authenticate',
+  'passport',
+  'jwt',
+  'apikey',
+  'bearer',
+  'authorize',
+  'authorized',
+  'guard',
+  'session',
+  'clerk',
+  'oauth',
+  'cognito',
+  'supertokens',
 ]);
 
 const NON_EXPRESS_CALLERS = new Set([
@@ -115,7 +126,8 @@ export function extractExpressRoutes(
   for (const file of sourceFiles) {
     // Only analyze JS/TS files, excluding test directories and test specs
     if (!/\.[jt]sx?$/.test(file.path)) continue;
-    if (/(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example)\/|\.(?:test|spec)\.[jt]sx?$/i.test(file.path)) continue;
+    const normalizedPath = file.path.replace(/\\/g, '/');
+    if (/(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example|cypress|playwright|e2e|stories|spec)\/|\.(?:test|spec|cy|stories)\.[jt]sx?$/i.test(normalizedPath)) continue;
 
     const sourceFile =
       file.ast ||

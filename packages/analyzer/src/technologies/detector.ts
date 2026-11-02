@@ -1,4 +1,5 @@
 import type { TechnologyFinding } from '@repo-analyzer/shared';
+import path from 'path';
 
 interface TechRule {
   name: string;
@@ -8,7 +9,7 @@ interface TechRule {
 }
 
 const TECH_CATALOG: TechRule[] = [
-  // Frameworks & Runtimes
+  // Frameworks & Runtimes (JS / TS)
   { name: 'Node.js', category: 'runtime', configFiles: ['package.json'] },
   { name: 'Express.js', category: 'framework', packageMatches: ['express'] },
   { name: 'Next.js', category: 'framework', packageMatches: ['next'], configFiles: ['next.config.js', 'next.config.mjs', 'next.config.ts'] },
@@ -20,7 +21,7 @@ const TECH_CATALOG: TechRule[] = [
 
   // Databases & ORMs
   { name: 'Mongoose', category: 'orm', packageMatches: ['mongoose'] },
-  { name: 'Prisma', category: 'orm', packageMatches: ['@prisma/client', 'prisma'], configFiles: ['prisma/schema.prisma'] },
+  { name: 'Prisma', category: 'orm', packageMatches: ['@prisma/client', 'prisma'], configFiles: ['prisma/schema.prisma', 'schema.prisma'] },
   { name: 'TypeORM', category: 'orm', packageMatches: ['typeorm'] },
   { name: 'Sequelize', category: 'orm', packageMatches: ['sequelize'] },
   { name: 'MongoDB Driver', category: 'database', packageMatches: ['mongodb'] },
@@ -30,8 +31,8 @@ const TECH_CATALOG: TechRule[] = [
   // Build & Tooling
   { name: 'TypeScript', category: 'build_tool', packageMatches: ['typescript'], configFiles: ['tsconfig.json'] },
   { name: 'Tailwind CSS', category: 'styling', packageMatches: ['tailwindcss'], configFiles: ['tailwind.config.js', 'tailwind.config.ts'] },
-  { name: 'Docker', category: 'build_tool', configFiles: ['Dockerfile', 'docker-compose.yml', 'compose.yaml'] },
-  { name: 'Vite', category: 'build_tool', packageMatches: ['vite'], configFiles: ['vite.config.ts', 'vite.config.js'] },
+  { name: 'Docker', category: 'build_tool', configFiles: ['Dockerfile', 'docker-compose.yml', 'compose.yaml', 'docker-compose.yaml'] },
+  { name: 'Vite', category: 'build_tool', packageMatches: ['vite'], configFiles: ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'] },
   { name: 'Webpack', category: 'build_tool', packageMatches: ['webpack'], configFiles: ['webpack.config.js'] },
   { name: 'Turbo', category: 'build_tool', packageMatches: ['turbo'], configFiles: ['turbo.json'] },
 
@@ -44,7 +45,25 @@ const TECH_CATALOG: TechRule[] = [
   { name: 'Jest', category: 'testing', packageMatches: ['jest'], configFiles: ['jest.config.js', 'jest.config.ts'] },
   { name: 'Vitest', category: 'testing', packageMatches: ['vitest'], configFiles: ['vitest.config.ts'] },
   { name: 'Supertest', category: 'testing', packageMatches: ['supertest'] },
+
+  // Backend & Systems (Multi-Language)
+  { name: 'Python', category: 'runtime', configFiles: ['requirements.txt', 'pyproject.toml', 'Pipfile', 'setup.py'] },
+  { name: 'Django', category: 'framework', configFiles: ['manage.py'] },
+  { name: 'Go', category: 'runtime', configFiles: ['go.mod'] },
+  { name: 'Rust', category: 'runtime', configFiles: ['Cargo.toml'] },
+  { name: 'Java', category: 'runtime', configFiles: ['pom.xml', 'build.gradle', 'build.gradle.kts'] },
 ];
+
+function hasMatchingConfigFile(filePaths: string[], targetConfig: string): string | null {
+  const targetLower = targetConfig.toLowerCase();
+  for (const p of filePaths) {
+    const norm = p.replace(/\\/g, '/').toLowerCase();
+    if (norm === targetLower || norm.endsWith('/' + targetLower)) {
+      return p;
+    }
+  }
+  return null;
+}
 
 export function detectTechnologies(
   files: { path: string; content?: string }[]
@@ -52,78 +71,99 @@ export function detectTechnologies(
   const findings: TechnologyFinding[] = [];
   const foundNames = new Set<string>();
 
-  // Parse package.json if present
-  const packageJsonFile = files.find((f) => f.path.toLowerCase() === 'package.json');
-  let dependencies: Record<string, string> = {};
-  let devDependencies: Record<string, string> = {};
-  let packageName = '';
-  let packageVersion = '';
+  // Collect and parse all package.json manifests (monorepos, subpackages, client/server)
+  const packageJsonFiles = files.filter((f) => {
+    const base = path.basename(f.path).toLowerCase();
+    return base === 'package.json';
+  });
 
-  if (packageJsonFile && packageJsonFile.content) {
+  interface DiscoveredPackage {
+    manifestPath: string;
+    packageName: string;
+    packageVersion: string;
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  }
+
+  const manifests: DiscoveredPackage[] = [];
+  for (const pkgFile of packageJsonFiles) {
+    if (!pkgFile.content) continue;
     try {
-      const parsed = JSON.parse(packageJsonFile.content);
-      packageName = (parsed.name || '').toLowerCase();
-      packageVersion = parsed.version || '';
-      dependencies = parsed.dependencies || {};
-      devDependencies = parsed.devDependencies || {};
+      const parsed = JSON.parse(pkgFile.content);
+      manifests.push({
+        manifestPath: pkgFile.path,
+        packageName: (parsed.name || '').toLowerCase(),
+        packageVersion: parsed.version || '',
+        dependencies: parsed.dependencies || {},
+        devDependencies: parsed.devDependencies || {},
+      });
     } catch {
       // Ignored if invalid JSON
     }
   }
 
-  const existingFilePaths = new Set(files.map((f) => f.path.toLowerCase()));
+  const allFilePaths = files.map((f) => f.path);
 
   for (const rule of TECH_CATALOG) {
     if (foundNames.has(rule.name)) continue;
 
-    // Check package manifests
+    // Check across all package manifests discovered
     if (rule.packageMatches) {
-      for (const pkg of rule.packageMatches) {
-        if (packageName === pkg.toLowerCase()) {
-          findings.push({
-            name: rule.name,
-            category: rule.category,
-            version: packageVersion,
-            confidence: 'confirmed',
-            evidence: `Repository is the core package "${packageName}" defined in package.json`,
-          });
-          foundNames.add(rule.name);
-          break;
-        } else if (dependencies[pkg]) {
-          findings.push({
-            name: rule.name,
-            category: rule.category,
-            version: dependencies[pkg],
-            confidence: 'confirmed',
-            evidence: `Found dependency "${pkg}": "${dependencies[pkg]}" in package.json`,
-          });
-          foundNames.add(rule.name);
-          break;
-        } else if (devDependencies[pkg]) {
-          findings.push({
-            name: rule.name,
-            category: rule.category,
-            version: devDependencies[pkg],
-            confidence: 'confirmed',
-            evidence: `Found devDependency "${pkg}": "${devDependencies[pkg]}" in package.json`,
-          });
-          foundNames.add(rule.name);
-          break;
+      for (const manifest of manifests) {
+        let matched = false;
+        for (const pkg of rule.packageMatches) {
+          const pkgLower = pkg.toLowerCase();
+          if (manifest.packageName === pkgLower) {
+            findings.push({
+              name: rule.name,
+              category: rule.category,
+              version: manifest.packageVersion,
+              confidence: 'confirmed',
+              evidence: `Repository package "${manifest.packageName}" defined in ${manifest.manifestPath}`,
+            });
+            foundNames.add(rule.name);
+            matched = true;
+            break;
+          } else if (manifest.dependencies[pkg]) {
+            findings.push({
+              name: rule.name,
+              category: rule.category,
+              version: manifest.dependencies[pkg],
+              confidence: 'confirmed',
+              evidence: `Found dependency "${pkg}": "${manifest.dependencies[pkg]}" in ${manifest.manifestPath}`,
+            });
+            foundNames.add(rule.name);
+            matched = true;
+            break;
+          } else if (manifest.devDependencies[pkg]) {
+            findings.push({
+              name: rule.name,
+              category: rule.category,
+              version: manifest.devDependencies[pkg],
+              confidence: 'confirmed',
+              evidence: `Found devDependency "${pkg}": "${manifest.devDependencies[pkg]}" in ${manifest.manifestPath}`,
+            });
+            foundNames.add(rule.name);
+            matched = true;
+            break;
+          }
         }
+        if (matched) break;
       }
     }
 
     if (foundNames.has(rule.name)) continue;
 
-    // Check config files
+    // Check config files anywhere in tree
     if (rule.configFiles) {
       for (const config of rule.configFiles) {
-        if (existingFilePaths.has(config.toLowerCase())) {
+        const matchedPath = hasMatchingConfigFile(allFilePaths, config);
+        if (matchedPath) {
           findings.push({
             name: rule.name,
             category: rule.category,
             confidence: 'confirmed',
-            evidence: `Detected configuration file: ${config}`,
+            evidence: `Detected configuration file: ${matchedPath}`,
           });
           foundNames.add(rule.name);
           break;

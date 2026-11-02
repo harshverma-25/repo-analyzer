@@ -22,9 +22,12 @@ const SECRET_PATTERNS = [
   { regex: /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"]([a-zA-Z0-9_\-.~]{16,})['"]/i, title: 'Potential Hardcoded Secret or API Key' },
 ];
 
+const DUMMY_SECRET_INDICATORS =
+  /process\.env|your_api_key|placeholder|<secret>|my_secret|changeme|change_me|replace_me/i;
+
 function isTestOrFixturePath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
-  return /(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example)\/|\.(?:test|spec)\.[jt]sx?$/i.test(normalized);
+  return /(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example|cypress|playwright|e2e|stories|spec)\/|\.(?:test|spec|cy|stories)\.[jt]sx?$/i.test(normalized);
 }
 
 function isCommentLine(line: string): boolean {
@@ -92,42 +95,75 @@ export function runSecurityScan(
     if (isTestOrFixturePath(file.path)) continue;
 
     const lines = file.content.split(/\r?\n/);
+    let inBlockComment = false;
+    let inTemplateLiteral = false;
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNum = i + 1;
+      const trimmed = line.trim();
+
+      // Track multi-line block comments
+      if (inBlockComment) {
+        if (line.includes('*/')) {
+          inBlockComment = false;
+        }
+        continue;
+      }
+      if (trimmed.startsWith('/*') && !line.includes('*/')) {
+        inBlockComment = true;
+        continue;
+      }
+
+      // Track multi-line template literals
+      if (inTemplateLiteral) {
+        if (/(?<!\\)`/.test(line)) {
+          inTemplateLiteral = false;
+        }
+        continue;
+      }
+      const backticks = (line.match(/(?<!\\)`/g) || []).length;
+      if (backticks % 2 === 1) {
+        inTemplateLiteral = true;
+      }
 
       // Cap scanned line length to prevent ReDoS or event loop stalls on minified files
       const MAX_SCAN_LINE_LENGTH = 2000;
       const lineToScan = line.length > MAX_SCAN_LINE_LENGTH ? line.slice(0, MAX_SCAN_LINE_LENGTH) : line;
 
-      // Check Hardcoded Secrets
-      for (const pattern of SECRET_PATTERNS) {
-        const match = lineToScan.match(pattern.regex);
-        if (match) {
-          const secretValue = match[1] || match[0];
-          // Filter common false positives like "your-api-key-here" or "process.env"
-          if (!/process\.env|your_api_key|placeholder|<secret>|my_secret/i.test(secretValue)) {
-            const redactedLine = line.replace(secretValue, redactSecret(secretValue));
-            findings.push({
-              id: `sec-${findingCounter++}`,
-              title: pattern.title,
-              severity: 'critical',
-              category: 'hardcoded_credential',
-              filePath: file.path,
-              lineNumber: lineNum,
-              explanation: `A potential credential or secret was discovered hardcoded in source code.`,
-              evidenceSnippet: redactedLine.trim(),
-              confidence: 'inferred',
-              recommendation: 'Move credentials into environment variables and reference via process.env. Rotate any compromised keys immediately.',
-              limitations: 'Static regex match. Tokens resembling cryptographic strings may be test keys or documentation fixtures.',
-            });
-            break;
+      // Check Hardcoded Secrets (skip comment lines that contain documentation hints)
+      const isComment = isCommentLine(line);
+      const isDocComment = isComment && /example|format|pattern|regex|reference|https?:\/\/|todo|fixme/i.test(line);
+
+      if (!isDocComment) {
+        for (const pattern of SECRET_PATTERNS) {
+          const match = lineToScan.match(pattern.regex);
+          if (match) {
+            const secretValue = match[1] || match[0];
+            // Filter common false positives like placeholders, dummy keys, or process.env
+            if (!DUMMY_SECRET_INDICATORS.test(secretValue)) {
+              const redactedLine = line.replace(secretValue, redactSecret(secretValue));
+              findings.push({
+                id: `sec-${findingCounter++}`,
+                title: pattern.title,
+                severity: 'critical',
+                category: 'hardcoded_credential',
+                filePath: file.path,
+                lineNumber: lineNum,
+                explanation: `A potential credential or secret was discovered hardcoded in source code.`,
+                evidenceSnippet: redactedLine.trim(),
+                confidence: 'inferred',
+                recommendation: 'Move credentials into environment variables and reference via process.env. Rotate any compromised keys immediately.',
+                limitations: 'Static regex match. Tokens resembling cryptographic strings may be test keys or documentation fixtures.',
+              });
+              break;
+            }
           }
         }
       }
 
       // Skip code execution checks on comment lines
-      if (isCommentLine(line)) {
+      if (isComment) {
         continue;
       }
 
@@ -168,7 +204,6 @@ export function runSecurityScan(
       }
 
       // Check Permissive CORS: origin: '*' or Access-Control-Allow-Origin: *
-      const trimmed = line.trim();
       const isDocOrMetaProperty = /^(?:title|explanation|description|message|summary|recommendation)\s*:/i.test(trimmed);
       if (!isDocOrMetaProperty) {
         if (/origin\s*:\s*['"]\*['"]|res\.setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\)/.test(line)) {
