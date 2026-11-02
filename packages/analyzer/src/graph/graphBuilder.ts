@@ -130,13 +130,29 @@ export function buildArchitectureGraph(
     }
   }
 
+function sanitizeMermaidText(str: string): string {
+  return str
+    .replace(/[\r\n\t]/g, ' ')
+    .replace(/[<>"'`]/g, (ch) => {
+      switch (ch) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&#39;';
+        case '`': return '&#96;';
+        default: return ch;
+      }
+    })
+    .trim();
+}
+
   // Build Mermaid diagram text
   let mermaidText = 'flowchart TD\n';
   mermaidText += '  subgraph API_Endpoints ["API Endpoints"]\n';
   const topRoutes = routes.slice(0, 10);
   for (const r of topRoutes) {
     const safeId = `R_${r.method}_${r.resolvedPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    const safeLabel = `[${r.method}] ${r.resolvedPath}`.replace(/"/g, '&quot;');
+    const safeLabel = sanitizeMermaidText(`[${r.method}] ${r.resolvedPath}`);
     mermaidText += `    ${safeId}["${safeLabel}"]\n`;
   }
   mermaidText += '  end\n';
@@ -144,12 +160,14 @@ export function buildArchitectureGraph(
   if (models.length > 0) {
     mermaidText += '  subgraph Database_Layer ["Database Models"]\n';
     for (const m of models) {
-      const safeModelLabel = `${m.modelName} Schema`.replace(/"/g, '&quot;');
-      mermaidText += `    M_${m.modelName}["${safeModelLabel}"]\n`;
+      const safeModelId = `M_${m.modelName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const safeModelLabel = sanitizeMermaidText(`${m.modelName} Schema`);
+      mermaidText += `    ${safeModelId}["${safeModelLabel}"]\n`;
     }
     mermaidText += '    DB[(MongoDB)]\n';
     for (const m of models) {
-      mermaidText += `    M_${m.modelName} --> DB\n`;
+      const safeModelId = `M_${m.modelName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      mermaidText += `    ${safeModelId} --> DB\n`;
     }
     mermaidText += '  end\n';
   }

@@ -19,6 +19,11 @@ export function parseAndValidateGitHubUrl(rawUrl: string): ParsedGitHubUrl {
     throw new Error('Invalid URL format');
   }
 
+  // Reject raw path traversal sequences, backslashes, or null bytes
+  if (trimmed.includes('..') || trimmed.includes('\\') || trimmed.includes('\0')) {
+    throw new Error('Malformed repository path: path traversal detected');
+  }
+
   // Reject anything other than https / http
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new Error('Only HTTP/HTTPS URLs are supported');

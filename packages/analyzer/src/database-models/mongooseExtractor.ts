@@ -7,7 +7,9 @@ export function extractMongooseModels(
   const models: DatabaseModelFinding[] = [];
 
   for (const file of sourceFiles) {
+    // Only analyze JS/TS files, excluding test directories and test specs
     if (!/\.[jt]sx?$/.test(file.path)) continue;
+    if (/(?:^|\/)(?:__tests__|tests|test)\/|\.(?:test|spec)\.[jt]sx?$/i.test(file.path)) continue;
 
     const sourceFile =
       file.ast ||
@@ -192,6 +194,17 @@ function parseSchemaFields(
                 isReference = true;
                 refTarget = optProp.initializer.getText(sourceFile).replace(/['"]/g, '');
                 options.ref = refTarget;
+              } else if (ts.isObjectLiteralExpression(optProp.initializer)) {
+                for (const subProp of optProp.initializer.properties) {
+                  if (ts.isPropertyAssignment(subProp)) {
+                    const subName = subProp.name.getText(sourceFile).replace(/['"]/g, '');
+                    if (subName === 'ref') {
+                      isReference = true;
+                      refTarget = subProp.initializer.getText(sourceFile).replace(/['"]/g, '');
+                      options.ref = refTarget;
+                    }
+                  }
+                }
               }
             }
           }

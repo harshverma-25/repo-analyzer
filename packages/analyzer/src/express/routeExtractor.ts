@@ -113,8 +113,9 @@ export function extractExpressRoutes(
   const routerMiddlewaresMap = new Map<string, string[]>(); // routerVarName -> array of middleware names
 
   for (const file of sourceFiles) {
-    // Only analyze JS/TS files
+    // Only analyze JS/TS files, excluding test directories and test specs
     if (!/\.[jt]sx?$/.test(file.path)) continue;
+    if (/(?:^|\/)(?:__tests__|tests|test)\/|\.(?:test|spec)\.[jt]sx?$/i.test(file.path)) continue;
 
     const sourceFile =
       file.ast ||
@@ -243,7 +244,11 @@ export function extractExpressRoutes(
               } else {
                 const text = arg.getText(sourceFile);
                 if (i === handlerArgs.length - 1 && !isKnownAuth(text)) {
-                  handlerName = text.length > 50 ? 'anonymousHandler' : text;
+                  if (ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)) {
+                    handlerName = 'inlineHandler';
+                  } else {
+                    handlerName = text.length > 50 ? 'anonymousHandler' : text;
+                  }
                 } else {
                   middlewareChain.push(text.length > 50 ? 'middleware' : text);
                 }
