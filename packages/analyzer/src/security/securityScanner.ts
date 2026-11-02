@@ -67,9 +67,13 @@ export function runSecurityScan(
       const line = lines[i];
       const lineNum = i + 1;
 
+      // Cap scanned line length to prevent ReDoS or event loop stalls on minified files
+      const MAX_SCAN_LINE_LENGTH = 2000;
+      const lineToScan = line.length > MAX_SCAN_LINE_LENGTH ? line.slice(0, MAX_SCAN_LINE_LENGTH) : line;
+
       // Check Hardcoded Secrets
       for (const pattern of SECRET_PATTERNS) {
-        const match = line.match(pattern.regex);
+        const match = lineToScan.match(pattern.regex);
         if (match) {
           const secretValue = match[1] || match[0];
           // Filter common false positives like "your-api-key-here" or "process.env"

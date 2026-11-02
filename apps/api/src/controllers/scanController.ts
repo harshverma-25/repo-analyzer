@@ -4,6 +4,7 @@ import { Project, Scan, ScanArtifact, AIConversation } from '@repo-analyzer/data
 import {
   CreateScanRequestSchema,
   AIExplainRequestSchema,
+  isValidObjectId,
   type ApiResponse,
   type FullScanReport,
 } from '@repo-analyzer/shared';
@@ -111,7 +112,7 @@ export async function createScan(req: Request, res: Response<ApiResponse>, next:
 export async function getScanStatus(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
     const scanId = String(req.params.scanId);
-    if (!mongoose.Types.ObjectId.isValid(scanId)) {
+    if (!isValidObjectId(scanId)) {
       return res.status(400).json({
         success: false,
         data: null,
@@ -153,7 +154,7 @@ export async function getScanStatus(req: Request, res: Response<ApiResponse>, ne
 export async function getScanReport(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
     const scanId = String(req.params.scanId);
-    if (!mongoose.Types.ObjectId.isValid(scanId)) {
+    if (!isValidObjectId(scanId)) {
       return res.status(400).json({
         success: false,
         data: null,
@@ -247,7 +248,7 @@ export function getScanArtifactByType(artifactType: string) {
   return async (req: Request, res: Response<ApiResponse>, next: NextFunction) => {
     try {
       const scanId = String(req.params.scanId);
-      if (!mongoose.Types.ObjectId.isValid(scanId)) {
+      if (!isValidObjectId(scanId)) {
         return res.status(400).json({
           success: false,
           data: null,
@@ -286,7 +287,7 @@ export async function explainScanAI(req: Request, res: Response<ApiResponse>, ne
     const scanId = String(req.params.scanId);
     const validated = AIExplainRequestSchema.parse(req.body);
 
-    if (!mongoose.Types.ObjectId.isValid(scanId)) {
+    if (!isValidObjectId(scanId)) {
       return res.status(400).json({
         success: false,
         data: null,

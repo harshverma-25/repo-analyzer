@@ -157,6 +157,9 @@ export class GitHubClient {
   async resolveCommitSha(owner: string, repo: string, revision?: string, options?: { signal?: AbortSignal }): Promise<string> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
+    if (revision && (revision.includes('\0') || revision.includes('..'))) {
+      throw new Error('Path traversal sequence detected in revision name');
+    }
     const ref = revision && revision.trim().length > 0 ? revision.trim() : 'HEAD';
     const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/commits/${encodeURIComponent(ref)}`;
     const res = await safeFetch(url, { headers: this.getHeaders(), signal: options?.signal });
@@ -176,6 +179,9 @@ export class GitHubClient {
   async getGitTree(owner: string, repo: string, commitSha: string, options?: { signal?: AbortSignal }): Promise<GitHubTreeResult> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
+    if (commitSha.includes('\0') || commitSha.includes('..')) {
+      throw new Error('Path traversal sequence detected in commit SHA');
+    }
     const cleanSha = encodeURIComponent(commitSha.trim());
     const url = `${this.baseUrl}/repos/${cleanOwner}/${cleanRepo}/git/trees/${cleanSha}?recursive=1`;
     const res = await safeFetch(url, { headers: this.getHeaders(), signal: options?.signal });
@@ -197,6 +203,9 @@ export class GitHubClient {
   async fetchRawFile(owner: string, repo: string, commitSha: string, filePath: string, options?: { signal?: AbortSignal }): Promise<string> {
     const cleanOwner = encodeURIComponent(owner.trim());
     const cleanRepo = encodeURIComponent(repo.trim());
+    if (commitSha.includes('\0') || commitSha.includes('..')) {
+      throw new Error('Path traversal sequence detected in commit SHA');
+    }
     const cleanSha = encodeURIComponent(commitSha.trim());
 
     // Sanitize path against directory traversal and null-byte injection

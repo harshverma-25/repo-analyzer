@@ -8,11 +8,22 @@ export class GeminiProvider implements IAIProvider {
   private apiKey: string;
   private modelName: string;
   private fallback: FallbackAIProvider;
+  private static MAX_CACHE_SIZE = 200;
   private summaryCache = new Map<string, AISummaryArtifact>();
   private explainCache = new Map<string, { answer: string; referencedFiles: string[] }>();
 
+  private setCache<T>(cache: Map<string, T>, key: string, value: T): void {
+    if (cache.size >= GeminiProvider.MAX_CACHE_SIZE) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey) {
+        cache.delete(oldestKey);
+      }
+    }
+    cache.set(key, value);
+  }
+
   constructor(apiKey?: string, modelName?: string) {
-    this.apiKey = apiKey || process.env.GEMINI_API_KEY || '';
+    this.apiKey = apiKey !== undefined ? apiKey : (process.env.GEMINI_API_KEY || '');
     this.modelName = modelName || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     this.fallback = new FallbackAIProvider();
   }
@@ -37,7 +48,7 @@ export class GeminiProvider implements IAIProvider {
       const jsonResponseText = await this.callGeminiApi(prompt);
       const parsed = JSON.parse(jsonResponseText);
       const validated = AISummaryResponseSchema.parse(parsed);
-      this.summaryCache.set(cacheKey, validated);
+      this.setCache(this.summaryCache, cacheKey, validated);
       return validated;
     } catch (error) {
       console.warn('[GeminiProvider] Failed to generate AI summary with Gemini, using fallback:', error);
@@ -78,7 +89,7 @@ ${context.endpoints.slice(0, 10).map((e) => `- ${e.method} ${e.resolvedPath} (${
 Models Discovered: ${context.databaseModels.length}
 ${context.databaseModels.slice(0, 8).map((m) => `- ${m.modelName} (${m.filePath})`).join('\n')}
 
-User Question: "${sanitizedQuestion}"
+User Question: ${JSON.stringify(sanitizedQuestion)}
 
 Respond with valid JSON with fields:
 {
@@ -89,7 +100,7 @@ Respond with valid JSON with fields:
       const jsonResponseText = await this.callGeminiApi(prompt);
       const parsed = JSON.parse(jsonResponseText);
       const validated = AIExplainResponseSchema.parse(parsed);
-      this.explainCache.set(cacheKey, validated);
+      this.setCache(this.explainCache, cacheKey, validated);
       return validated;
     } catch (error) {
       console.warn('[GeminiProvider] Failed to answer question with Gemini, using fallback:', error);

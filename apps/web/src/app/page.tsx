@@ -144,6 +144,9 @@ export default function LandingPage() {
                 <div className="relative flex-1">
                   <Github className="w-4 h-4 text-text-subtle absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
+                    id="repo-url-input"
+                    name="repoUrl"
+                    aria-label="Repository URL"
                     type="url"
                     required
                     placeholder="https://github.com/expressjs/express"
@@ -163,6 +166,9 @@ export default function LandingPage() {
                 <div className="relative sm:w-32">
                   <GitBranch className="w-4 h-4 text-text-subtle absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
+                    id="repo-branch-input"
+                    name="branch"
+                    aria-label="Branch or revision (optional)"
                     type="text"
                     placeholder="Branch"
                     value={branch}
@@ -173,6 +179,8 @@ export default function LandingPage() {
 
                 {/* Submit Analyze Button */}
                 <button
+                  id="analyze-submit-button"
+                  aria-label="Analyze repository"
                   type="submit"
                   disabled={isLoading || !repoUrl.trim()}
                   className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs sm:text-sm font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition-all disabled:opacity-40 shadow-sm whitespace-nowrap cursor-pointer"

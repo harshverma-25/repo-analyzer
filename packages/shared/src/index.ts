@@ -365,9 +365,24 @@ export const CreateScanRequestSchema = z.object({
           'Must be a valid public GitHub repository URL (e.g. https://github.com/expressjs/express)',
       }
     ),
-  branch: z.string().trim().max(100, 'Branch name cannot exceed 100 characters').optional(),
+  branch: z
+    .string()
+    .trim()
+    .max(100, 'Branch name cannot exceed 100 characters')
+    .regex(/^[a-zA-Z0-9_.\-\/]+$/, 'Branch name contains invalid characters')
+    .refine(
+      (val) => !val.includes('..') && !val.includes('\0') && !val.startsWith('/') && !val.endsWith('/'),
+      {
+        message: 'Branch name cannot contain path traversal sequences or start/end with a slash',
+      }
+    )
+    .optional(),
 });
 export type CreateScanRequest = z.infer<typeof CreateScanRequestSchema>;
+
+export function isValidObjectId(id: string): boolean {
+  return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
+}
 
 export const AIExplainRequestSchema = z.object({
   question: z

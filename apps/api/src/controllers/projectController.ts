@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { Project, Scan, deleteProjectCascading } from '@repo-analyzer/database';
-import type { ApiResponse } from '@repo-analyzer/shared';
+import { isValidObjectId, type ApiResponse } from '@repo-analyzer/shared';
+import { scanQueue } from '../jobs/scanQueue.js';
 
 export async function getProjects(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
@@ -19,7 +20,7 @@ export async function getProjects(req: Request, res: Response<ApiResponse>, next
 export async function getProjectById(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
     const projectId = String(req.params.projectId);
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({
         success: false,
         data: null,
@@ -49,7 +50,7 @@ export async function getProjectById(req: Request, res: Response<ApiResponse>, n
 export async function getProjectScans(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
     const projectId = String(req.params.projectId);
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({
         success: false,
         data: null,
@@ -73,12 +74,19 @@ export async function getProjectScans(req: Request, res: Response<ApiResponse>, 
 export async function deleteProject(req: Request, res: Response<ApiResponse>, next: NextFunction) {
   try {
     const projectId = String(req.params.projectId);
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    if (!isValidObjectId(projectId)) {
       return res.status(400).json({
         success: false,
         data: null,
         error: { code: 'INVALID_ID', message: 'Invalid project ID format.' },
       });
+    }
+
+    // Cancel any in-flight or queued scans for this project before cascading deletion
+    const pId = new mongoose.Types.ObjectId(projectId);
+    const existingScans = await Scan.find({ projectId: pId }).select('_id').lean();
+    for (const scan of existingScans) {
+      scanQueue.cancelScan(scan._id.toString());
     }
 
     const deleted = await deleteProjectCascading(projectId);

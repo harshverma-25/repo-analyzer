@@ -10,6 +10,9 @@ import { scanQueue } from './jobs/scanQueue.js';
 
 export const app: Express = express();
 
+// Proxy Configuration: Trust first proxy hop (load balancer/reverse proxy) for rate limiting & IP resolution
+app.set('trust proxy', 1);
+
 // Security Hardening: Disable Express signature and attach security headers
 app.disable('x-powered-by');
 app.use(

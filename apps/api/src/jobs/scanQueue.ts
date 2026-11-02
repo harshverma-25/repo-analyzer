@@ -17,10 +17,11 @@ interface ScanJob {
   branch?: string;
 }
 
-class ScanQueue {
+export class ScanQueue {
   private queue: ScanJob[] = [];
   private maxConcurrency = config.maxConcurrentScans || 2;
   private activeJobs = 0;
+  private activeAbortControllers = new Map<string, AbortController>();
 
   /**
    * Reconciles any scans left hanging in 'running' or 'queued' from a prior server process.
@@ -41,6 +42,21 @@ class ScanQueue {
     } catch (err) {
       console.warn('[ScanQueue] Failed to reconcile interrupted scans:', err);
     }
+  }
+
+  cancelScan(scanId: string): boolean {
+    const initialQueueLength = this.queue.length;
+    this.queue = this.queue.filter((job) => job.scanId !== scanId);
+    let cancelled = this.queue.length < initialQueueLength;
+
+    if (this.activeAbortControllers.has(scanId)) {
+      const controller = this.activeAbortControllers.get(scanId);
+      controller?.abort(new Error('Scan cancelled by project deletion or user request'));
+      this.activeAbortControllers.delete(scanId);
+      cancelled = true;
+    }
+
+    return cancelled;
   }
 
   enqueue(job: ScanJob) {
@@ -76,6 +92,7 @@ class ScanQueue {
 
     // AbortController for true cancellation and timeout propagation
     const abortController = new AbortController();
+    this.activeAbortControllers.set(scanId, abortController);
     const timeoutHandle = setTimeout(() => {
       abortController.abort(new Error('Scan execution timed out after 5 minutes'));
     }, 5 * 60 * 1000);
@@ -91,13 +108,19 @@ class ScanQueue {
         abortController.signal
       );
     } catch (error: any) {
-      console.error(`[ScanQueue] Scan ${scanId} failed:`, error);
-      await Scan.findByIdAndUpdate(scanId, {
-        status: 'failed',
-        stage: 'failed',
-        errorMessage: error.message || 'An error occurred during repository analysis.',
-      });
+      const scanStillExists = await Scan.findById(scanId).select('_id').lean();
+      if (scanStillExists) {
+        console.error(`[ScanQueue] Scan ${scanId} failed:`, error);
+        await Scan.findByIdAndUpdate(scanId, {
+          status: 'failed',
+          stage: 'failed',
+          errorMessage: error.message || 'An error occurred during repository analysis.',
+        });
+      } else {
+        console.log(`[ScanQueue] Scan ${scanId} was deleted; skipping failure status update.`);
+      }
     } finally {
+      this.activeAbortControllers.delete(scanId);
       clearTimeout(timeoutHandle);
     }
   }
@@ -211,6 +234,14 @@ class ScanQueue {
     await this.updateProgress(scanId, 'analyzing_code', 70);
     const analysisOutput = runDeterministicAnalysis(rawFiles);
 
+    // Record diagnostic if candidate files exceeded bounded fetch batch
+    if (candidateFiles.length > fetchBatch.length) {
+      const skippedCount = candidateFiles.length - fetchBatch.length;
+      analysisOutput.statistics.skippedReasons[`File batch analysis limit reached (prioritized top ${fetchBatch.length} files)`] = skippedCount;
+      analysisOutput.statistics.skippedFiles += skippedCount;
+      analysisOutput.summaryMetrics.skippedFiles += skippedCount;
+    }
+
     // If tree was truncated by GitHub, record warning diagnostic
     if (treeResult.truncated) {
       analysisOutput.statistics.skippedReasons['GitHub API truncated tree (exceeded 100,000 repository entries)'] = 1;
@@ -227,6 +258,16 @@ class ScanQueue {
       databaseModels: analysisOutput.databaseModels,
       securityFindings: analysisOutput.securityFindings,
     });
+
+    if (signal.aborted) {
+      throw new Error('Scan was cancelled or timed out.');
+    }
+
+    const scanStillExists = await Scan.findById(scanId).select('_id').lean();
+    if (!scanStillExists) {
+      console.log(`[ScanQueue] Scan ${scanId} was deleted during execution; aborting artifact persistence.`);
+      return;
+    }
 
     // 7. Persist Artifacts in Database Concurrently
     const sId = new mongoose.Types.ObjectId(scanId);
