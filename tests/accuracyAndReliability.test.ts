@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractExpressRoutes } from '../packages/analyzer/src/express/routeExtractor.js';
 import { extractMongooseModels } from '../packages/analyzer/src/database-models/mongooseExtractor.js';
+import { runSecurityScan } from '../packages/analyzer/src/security/securityScanner.js';
 import { ScanQueue } from '../apps/api/src/jobs/scanQueue.js';
 import { ScanStatusEnum, ScanStageEnum } from '../packages/shared/src/index.js';
 
@@ -180,4 +181,65 @@ test('Reliability — ScanQueue handles cancellation cleanly and state transitio
 
   const validStage = ScanStageEnum.parse('analyzing_code');
   assert.equal(validStage, 'analyzing_code');
+});
+
+// ============================================================================
+// 6. Security Scanner — Suppresses false positives in comments, strings, & test suites
+// ============================================================================
+test('Security Scanner — Suppresses false positives from comments, string literals, and test suites', () => {
+  const codeWithCommentsAndStrings = [
+    {
+      path: 'src/utils/scannerService.ts',
+      content: `
+        // Check Dynamic Code Execution: eval() or new Function()
+        // Check Command Execution: exec( or execSync(
+        // Check Permissive CORS: origin: '*' or Access-Control-Allow-Origin: *
+        const ruleMetadata = {
+          title: 'Use of eval() Dynamic Code Execution',
+          explanation: 'Dynamic code execution via eval() can lead to arbitrary remote code execution.',
+          recommendation: 'Refactor code to use standard JSON parsing rather than eval().',
+        };
+      `,
+    },
+    {
+      path: 'tests/unit/eval.test.ts',
+      content: `
+        // This is a test file containing eval and test secrets
+        const fakeKey = "AKIAIOSFODNN7EXAMPLE";
+        const testCode = eval("1 + 1");
+      `,
+    },
+    {
+      path: 'fixtures/security-cases/vulnerable.js',
+      content: `
+        // Fixture should also be excluded
+        const awsSecret = "AKIAIOSFODNN7EXAMPLE";
+        eval("1 + 1");
+      `,
+    },
+  ];
+
+  const findings = runSecurityScan(codeWithCommentsAndStrings, []);
+  assert.equal(
+    findings.length,
+    0,
+    'Comments, metadata string literals, and test/fixture files must not trigger security findings'
+  );
+
+  // But genuine executable code in production files must still trigger
+  const genuineVulnFile = [
+    {
+      path: 'src/services/executor.ts',
+      content: `
+        function executeRaw(code: string) {
+          return eval(code);
+        }
+      `,
+    },
+  ];
+
+  const genuineFindings = runSecurityScan(genuineVulnFile, []);
+  assert.equal(genuineFindings.length, 1);
+  assert.equal(genuineFindings[0].category, 'code_execution');
+  assert.equal(genuineFindings[0].title, 'Use of eval() Dynamic Code Execution');
 });

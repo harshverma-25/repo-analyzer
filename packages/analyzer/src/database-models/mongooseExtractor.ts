@@ -9,7 +9,7 @@ export function extractMongooseModels(
   for (const file of sourceFiles) {
     // Only analyze JS/TS files, excluding test directories and test specs
     if (!/\.[jt]sx?$/.test(file.path)) continue;
-    if (/(?:^|\/)(?:__tests__|tests|test)\/|\.(?:test|spec)\.[jt]sx?$/i.test(file.path)) continue;
+    if (/(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example)\/|\.(?:test|spec)\.[jt]sx?$/i.test(file.path)) continue;
 
     const sourceFile =
       file.ast ||

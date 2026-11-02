@@ -22,6 +22,32 @@ const SECRET_PATTERNS = [
   { regex: /(?:api[_-]?key|secret|password|auth[_-]?token)\s*[:=]\s*['"]([a-zA-Z0-9_\-.~]{16,})['"]/i, title: 'Potential Hardcoded Secret or API Key' },
 ];
 
+function isTestOrFixturePath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/');
+  return /(?:^|\/)(?:__tests__|tests|test|fixtures|fixture|mocks|mock|examples|example)\/|\.(?:test|spec)\.[jt]sx?$/i.test(normalized);
+}
+
+function isCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('/*') ||
+    trimmed.startsWith('*') ||
+    trimmed.startsWith('<!--') ||
+    trimmed.startsWith('#')
+  );
+}
+
+function stripCommentsAndStrings(line: string): string {
+  // Strip trailing single-line comments
+  let code = line.replace(/\/\/.*$/, '');
+  // Strip double, single, and template string literals
+  code = code.replace(/"(?:\\.|[^"\\])*"/g, '""');
+  code = code.replace(/'(?:\\.|[^'\\])*'/g, "''");
+  code = code.replace(/`(?:\\.|[^`\\])*`/g, '``');
+  return code;
+}
+
 export function runSecurityScan(
   files: { path: string; content: string }[],
   routes: RouteFinding[]
@@ -29,8 +55,10 @@ export function runSecurityScan(
   const findings: SecurityFinding[] = [];
   let findingCounter = 1;
 
-  // 1. Check for committed secret files
+  // 1. Check for committed secret files (excluding test/fixture directories)
   for (const file of files) {
+    if (isTestOrFixturePath(file.path)) continue;
+
     const filename = path.basename(file.path).toLowerCase();
     if (
       filename === '.env' ||
@@ -57,10 +85,11 @@ export function runSecurityScan(
     }
   }
 
-  // 2. Scan file content lines for patterns (using hoisted regex array)
+  // 2. Scan file content lines for patterns (excluding test/fixture directories)
 
   for (const file of files) {
     if (!/\.[jt]sx?$/.test(file.path)) continue;
+    if (isTestOrFixturePath(file.path)) continue;
 
     const lines = file.content.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
@@ -97,8 +126,15 @@ export function runSecurityScan(
         }
       }
 
-      // Check Dynamic Code Execution: eval() or new Function()
-      if (/\beval\s*\(/.test(line)) {
+      // Skip code execution checks on comment lines
+      if (isCommentLine(line)) {
+        continue;
+      }
+
+      const executableCode = stripCommentsAndStrings(lineToScan);
+
+      // Check Dynamic Code Execution: eval() or new Function() (only on actual executable code)
+      if (/\beval\s*\(/.test(executableCode)) {
         findings.push({
           id: `sec-${findingCounter++}`,
           title: 'Use of eval() Dynamic Code Execution',
@@ -114,8 +150,8 @@ export function runSecurityScan(
         });
       }
 
-      // Check Command Execution: exec( or execSync(
-      if (/\b(?:child_process\.)?(?:exec|execSync)\s*\(/.test(line)) {
+      // Check Command Execution: exec( or execSync( (only on actual executable code)
+      if (/\b(?:child_process\.)?(?:exec|execSync)\s*\(/.test(executableCode)) {
         findings.push({
           id: `sec-${findingCounter++}`,
           title: 'Direct Shell Command Execution (child_process.exec)',
@@ -132,20 +168,24 @@ export function runSecurityScan(
       }
 
       // Check Permissive CORS: origin: '*' or Access-Control-Allow-Origin: *
-      if (/origin\s*:\s*['"]\*['"]|res\.setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\)/.test(line)) {
-        findings.push({
-          id: `sec-${findingCounter++}`,
-          title: 'Wildcard Cross-Origin Resource Sharing (CORS: *)',
-          severity: 'low',
-          category: 'insecure_cors',
-          filePath: file.path,
-          lineNumber: lineNum,
-          explanation: 'Access-Control-Allow-Origin is set to wildcard (*), permitting any external website to issue cross-origin requests to this service.',
-          evidenceSnippet: line.trim(),
-          confidence: 'confirmed',
-          recommendation: 'Specify allowed origins explicitly or dynamically validate against a whitelist.',
-          limitations: 'Intentional for public APIs, but hazardous for authenticated or private internal endpoints.',
-        });
+      const trimmed = line.trim();
+      const isDocOrMetaProperty = /^(?:title|explanation|description|message|summary|recommendation)\s*:/i.test(trimmed);
+      if (!isDocOrMetaProperty) {
+        if (/origin\s*:\s*['"]\*['"]|res\.setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\)/.test(line)) {
+          findings.push({
+            id: `sec-${findingCounter++}`,
+            title: 'Wildcard Cross-Origin Resource Sharing (CORS: *)',
+            severity: 'low',
+            category: 'insecure_cors',
+            filePath: file.path,
+            lineNumber: lineNum,
+            explanation: 'Access-Control-Allow-Origin is set to wildcard (*), permitting any external website to issue cross-origin requests to this service.',
+            evidenceSnippet: line.trim(),
+            confidence: 'confirmed',
+            recommendation: 'Specify allowed origins explicitly or dynamically validate against a whitelist.',
+            limitations: 'Intentional for public APIs, but hazardous for authenticated or private internal endpoints.',
+          });
+        }
       }
     }
   }
