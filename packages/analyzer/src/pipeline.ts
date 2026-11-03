@@ -173,8 +173,8 @@ export function runDeterministicAnalysis(
   // AST Mongoose Models (reuses parsedSourceFiles)
   const databaseModels = extractMongooseModels(parsedSourceFiles);
 
-  // Static Security Observations
-  const securityFindings = runSecurityScan(analyzedFiles, endpoints);
+  // Static Security Observations (reuses parsedSourceFiles AST)
+  const securityFindings = runSecurityScan(parsedSourceFiles, endpoints);
 
   // Architecture Graph
   const architectureGraph = buildArchitectureGraph(endpoints, databaseModels);
