@@ -24,15 +24,15 @@
 
   .dark {
     color-scheme: dark;
-    --background: 222 47% 7%;
-    --surface: 220 24% 11%;
-    --surface-hover: 217 25% 16%;
-    --surface-elevated: 220 24% 14%;
-    --border: 217 20% 19%;
-    --border-subtle: 217 20% 14%;
-    --text-main: 210 40% 98%;
-    --text-muted: 215 20% 65%;
-    --text-subtle: 215 16% 47%;
+    --background: 0 0% 2%;
+    --surface: 0 0% 5%;
+    --surface-hover: 0 0% 9%;
+    --surface-elevated: 0 0% 7%;
+    --border: 0 0% 12%;
+    --border-subtle: 0 0% 8%;
+    --text-main: 0 0% 98%;
+    --text-muted: 240 5% 65%;
+    --text-subtle: 240 4% 45%;
     --primary: 217 91% 60%;
     --primary-hover: 217 91% 52%;
     --primary-muted: 217 91% 60% / 0.15;
